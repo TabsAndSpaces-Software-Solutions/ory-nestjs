@@ -39,6 +39,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Type check
+        run: npx tsc --noEmit -p tsconfig.json
+
       - name: Test
         run: npm test
 
