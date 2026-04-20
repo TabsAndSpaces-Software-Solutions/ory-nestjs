@@ -1,9 +1,20 @@
 {
-  "name": "ory-nestjs",
+  "name": "@tabsandspaces-software-solutions/ory-nestjs",
   "version": "0.1.0",
-  "private": true,
   "description": "ory-nestjs — NestJS wrapper library for the Ory Stack (self-hosted or Ory Cloud). Abstracts Ory away from consumers.",
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TabsAndSpaces-Software-Solutions/ory-nestjs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TabsAndSpaces-Software-Solutions/ory-nestjs/issues"
+  },
+  "homepage": "https://github.com/TabsAndSpaces-Software-Solutions/ory-nestjs#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
