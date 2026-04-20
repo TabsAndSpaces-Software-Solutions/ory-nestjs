@@ -1,0 +1,15 @@
+.agents
+.claude
+.start
+skills-lock.json
+
+# Node / TS
+node_modules/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+*.tgz

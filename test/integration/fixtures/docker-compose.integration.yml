@@ -1,0 +1,61 @@
+# Integration-test Ory stack for ory-nestjs.
+#
+# Differences from the auth-example dev stack:
+#   - Password method ENABLED so tests can programmatically log in without
+#     email/SMS side channels.
+#   - Session lifespan SHORTENED to 15m so expiry-edge tests don't have to
+#     wait the production default.
+#   - Ports are randomized by Testcontainers (no host mappings) so parallel
+#     suites can coexist without collision.
+#   - Postgres uses a tmpfs volume — no on-disk persistence, teardown wipes
+#     state with the container.
+#
+# Driven by `test/integration/harness/global-setup.ts` via Testcontainers'
+# `DockerComposeEnvironment`. Not intended for manual `docker compose up`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ory
+      POSTGRES_PASSWORD: ory
+      POSTGRES_DB: kratos
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "ory", "-d", "kratos"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  kratos-migrate:
+    image: oryd/kratos:v1.3.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DSN: postgres://ory:ory@postgres:5432/kratos?sslmode=disable
+    command: migrate sql -e --yes
+    restart: on-failure
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+
+  kratos:
+    image: oryd/kratos:v1.3.1
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4433" # public (host port assigned by testcontainers)
+      - "4434" # admin
+    environment:
+      DSN: postgres://ory:ory@postgres:5432/kratos?sslmode=disable
+      LOG_LEVEL: warning
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:4434/admin/health/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

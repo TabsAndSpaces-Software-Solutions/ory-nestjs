@@ -1,0 +1,88 @@
+version: v1.3.1
+
+# Integration-test Kratos config for ory-nestjs.
+#
+# Keep this file small and deterministic. It must:
+#   - enable the `password` method so tests can log in programmatically,
+#   - expose public + admin servers on fixed container ports (4433 / 4434;
+#     testcontainers maps to random host ports),
+#   - declare a single identity schema (`default`),
+#   - run with short lifespans so expiry-edge tests don't hang.
+
+serve:
+  public:
+    base_url: http://kratos:4433/
+    cors:
+      enabled: true
+      allowed_origins: ["*"]
+      allowed_methods: [GET, POST, PUT, DELETE, OPTIONS]
+      allowed_headers: [Authorization, Content-Type, X-Session-Token]
+      exposed_headers: [Content-Type, Set-Cookie]
+      allow_credentials: true
+  admin:
+    base_url: http://kratos:4434/
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/config/kratos/identity.schema.json
+
+selfservice:
+  default_browser_return_url: http://localhost/
+  allowed_return_urls:
+    - http://localhost
+  methods:
+    password:
+      enabled: true
+      config:
+        # Allow short passwords in tests; production deployments set stricter.
+        min_password_length: 6
+        identifier_similarity_check_enabled: false
+        haveibeenpwned_enabled: false
+  flows:
+    login:
+      ui_url: http://localhost/login
+      lifespan: 10m
+    registration:
+      enabled: true
+      lifespan: 10m
+      ui_url: http://localhost/registration
+      after:
+        password:
+          hooks:
+            - hook: session
+    logout:
+      after:
+        default_browser_return_url: http://localhost/
+    error:
+      ui_url: http://localhost/error
+    settings:
+      ui_url: http://localhost/settings
+      privileged_session_max_age: 15m
+
+session:
+  lifespan: 15m
+  cookie:
+    name: ory_kratos_session
+    same_site: Lax
+
+log:
+  level: warning
+  format: text
+  # Integration tests never inspect OTPs — keep the default redaction on.
+  leak_sensitive_values: false
+
+secrets:
+  cookie:
+    - COOKIE_SECRET_THIRTY_TWO_CHARS_A
+  cipher:
+    - CIPHER_SECRET_THIRTY_TWO_CHARS_B
+
+ciphers:
+  algorithm: xchacha20-poly1305
+
+hashers:
+  # bcrypt cost 4 — minimum allowed; keeps test login fast.
+  bcrypt:
+    cost: 4
