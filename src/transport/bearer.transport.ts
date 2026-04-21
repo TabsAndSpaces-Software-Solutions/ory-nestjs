@@ -9,7 +9,7 @@
 import type { Session as OrySession } from '@ory/client';
 import { createHash } from 'node:crypto';
 
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantClients } from '../clients';
 import type { TenantName } from '../dto';
 import { identityMapper } from '../dto/mappers/identity.mapper';
@@ -52,7 +52,7 @@ export class BearerTransport implements SessionTransport {
     req: RequestLike,
     tenant: TenantClients,
     tenantName: TenantName,
-    _tenantConfig: TenantConfig,
+    _tenantConfig: ValidatedTenantConfig,
   ): Promise<ResolvedSession | null> {
     const authHeader = firstHeaderValue(req.headers['authorization']);
     const token = parseBearer(authHeader);
@@ -74,7 +74,7 @@ export class BearerTransport implements SessionTransport {
 
   public credentialFingerprint(
     req: RequestLike,
-    _tenantConfig: TenantConfig,
+    _tenantConfig: ValidatedTenantConfig,
   ): string | null {
     const token = parseBearer(firstHeaderValue(req.headers['authorization']));
     if (!token) return null;

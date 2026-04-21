@@ -31,7 +31,7 @@ import { Injectable } from '@nestjs/common';
 
 import type { TenantClients } from '../../clients';
 import type {
-  TenantConfig,
+  ValidatedTenantConfig,
   ValidatedIamOptions,
 } from '../../config';
 import type { TenantName } from '../../dto';
@@ -44,7 +44,7 @@ import { IamConfigurationError } from '../../errors';
  */
 export type TenantClientsBuilder = (
   tenant: TenantName,
-  config: TenantConfig,
+  config: ValidatedTenantConfig,
 ) => TenantClients;
 
 @Injectable()

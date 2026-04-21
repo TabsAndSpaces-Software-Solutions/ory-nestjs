@@ -20,7 +20,7 @@
  *   - Stub `TenantRegistry` with an in-memory map.
  *   - Stub each tenant's axios instance with a `get: jest.fn()` whose
  *     resolution/rejection we control per test.
- *   - Use bare `TenantConfig` shapes; the indicator only reads
+ *   - Use bare `ValidatedTenantConfig` shapes; the indicator only reads
  *     `kratos.{publicUrl,adminUrl}`, `keto.{readUrl,writeUrl}`,
  *     `hydra.adminUrl`.
  */
@@ -28,7 +28,7 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 
 import type { TenantClients } from '../../../src/clients';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantName, IamAuditEvent } from '../../../src/dto';
 import type { AuditSink } from '../../../src/audit';
 import type { TenantRegistry } from '../../../src/module/registry/tenant-registry.service';
@@ -74,7 +74,7 @@ type TenantSpec = {
   hydraAdmin?: string;
 };
 
-function makeTenantConfig(spec: TenantSpec): TenantConfig {
+function makeTenantConfig(spec: TenantSpec): ValidatedTenantConfig {
   const config: Record<string, unknown> = {
     mode: 'self-hosted',
     transport: 'cookie',
@@ -90,7 +90,7 @@ function makeTenantConfig(spec: TenantSpec): TenantConfig {
   if (spec.hydraAdmin !== undefined) {
     config.hydra = { publicUrl: 'http://hydra.test', adminUrl: spec.hydraAdmin };
   }
-  return config as unknown as TenantConfig;
+  return config as unknown as ValidatedTenantConfig;
 }
 
 function makeClients(

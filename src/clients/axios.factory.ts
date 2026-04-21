@@ -26,7 +26,7 @@ import * as https from 'node:https';
 import axios, { AxiosInstance } from 'axios';
 
 import type { Redactor } from '../audit';
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import { applyRequestId } from './interceptors/request-id.interceptor';
 import { redactErrorHandler } from './interceptors/redact-error.interceptor';
 import { installRetryInterceptor } from './interceptors/retry.interceptor';
@@ -54,11 +54,11 @@ export class AxiosFactory {
    * `basePath` when dispatching requests (see `OryClientFactory`).
    */
   public static create(
-    tenant: TenantConfig,
+    tenant: ValidatedTenantConfig,
     deps: AxiosFactoryDeps,
   ): AxiosInstance {
     const timeout =
-      (tenant as TenantConfig & TenantWithTimeout).timeoutMs ??
+      (tenant as ValidatedTenantConfig & TenantWithTimeout).timeoutMs ??
       DEFAULT_TIMEOUT_MS;
 
     const instance = axios.create({

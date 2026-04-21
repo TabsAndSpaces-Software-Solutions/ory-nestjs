@@ -13,7 +13,7 @@
  *   - `kratosIdentity` / `ketoPermission` / `ketoRelationship` / `hydraOauth2`
  *     are optional and present iff the tenant config declares the
  *     corresponding product / admin URL / cloud API key.
- *   - `config` is a direct reference to the frozen `TenantConfig` for
+ *   - `config` is a direct reference to the frozen `ValidatedTenantConfig` for
  *     audit/debug context. Consumers should not mutate it.
  */
 import type { AxiosInstance } from 'axios';
@@ -25,12 +25,12 @@ import type {
   RelationshipApi,
 } from '@ory/client';
 
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantName } from '../dto';
 
 export interface TenantClients {
   tenant: TenantName;
-  config: TenantConfig;
+  config: ValidatedTenantConfig;
   axios: AxiosInstance;
   kratosFrontend: FrontendApi;
   kratosIdentity?: IdentityApi;

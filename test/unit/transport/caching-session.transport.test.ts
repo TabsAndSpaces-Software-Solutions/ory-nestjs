@@ -16,7 +16,7 @@
 import { InMemorySessionCache } from '../../../src/cache/in-memory-session-cache';
 import type { SessionCache } from '../../../src/cache/session-cache.interface';
 import type { TenantClients } from '../../../src/clients';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type {
   TenantName,
   IamIdentity,
@@ -29,7 +29,7 @@ import type {
   SessionTransport,
 } from '../../../src/transport/session-transport.interface';
 
-function makeTenantConfig(): TenantConfig {
+function makeTenantConfig(): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'cookie',
@@ -37,7 +37,7 @@ function makeTenantConfig(): TenantConfig {
       publicUrl: 'http://kratos.test',
       sessionCookieName: 'ory_kratos_session',
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 function makeTenantClients(tenant: TenantName): TenantClients {

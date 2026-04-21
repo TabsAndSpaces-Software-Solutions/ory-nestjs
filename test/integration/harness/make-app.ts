@@ -31,7 +31,7 @@ import {
   type AuditSink,
   InMemorySessionCache,
   Public,
-  type TenantConfig,
+  type ValidatedTenantConfig,
   type IamOptions,
   type IamAuditEvent,
   IamModule,
@@ -41,10 +41,10 @@ import { readHandle } from './stack-handle';
 
 export interface IntegrationAppOptions {
   /**
-   * Overrides merged into the single tenant's `TenantConfig`. Useful for
+   * Overrides merged into the single tenant's `ValidatedTenantConfig`. Useful for
    * toggling transport kind per-test or enabling session caching.
    */
-  readonly tenantOverrides?: Partial<TenantConfig>;
+  readonly tenantOverrides?: Partial<ValidatedTenantConfig>;
   /**
    * If true, wires an `InMemorySessionCache` as the sessionCache backend.
    * Caller is responsible for setting `tenantOverrides.cache.sessionTtlMs > 0`.
@@ -121,7 +121,7 @@ export async function makeIntegrationApp(
   // self-hosted mode (it's a guardrail against the common misconfig of
   // exposing adminUrl without auth). Pass an arbitrary token — Kratos
   // accepts Authorization: Bearer <anything> and ignores it.
-  const baseTenant: TenantConfig = {
+  const baseTenant: ValidatedTenantConfig = {
     mode: 'self-hosted',
     transport: 'cookie',
     kratos: {
@@ -130,7 +130,7 @@ export async function makeIntegrationApp(
       adminToken: 'integration-test-unused',
       sessionCookieName: 'ory_kratos_session',
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 
   const tenantConfig = {
     ...baseTenant,
@@ -139,7 +139,7 @@ export async function makeIntegrationApp(
       ...baseTenant.kratos,
       ...(opts.tenantOverrides?.kratos ?? {}),
     },
-  } as TenantConfig;
+  } as ValidatedTenantConfig;
 
   const iamOptions: IamOptions = {
     tenants: { demo: tenantConfig },

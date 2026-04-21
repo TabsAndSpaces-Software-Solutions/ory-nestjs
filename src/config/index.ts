@@ -19,6 +19,7 @@ export type {
   IamOptions,
   ValidatedIamOptions,
   TenantConfig,
+  ValidatedTenantConfig,
   TenantMode,
   TransportKind,
 } from './config.types';

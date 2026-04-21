@@ -12,7 +12,7 @@
 import type { Session as OrySession } from '@ory/client';
 import { createHash } from 'node:crypto';
 
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantClients } from '../clients';
 import type { TenantName } from '../dto';
 import { identityMapper } from '../dto/mappers/identity.mapper';
@@ -40,7 +40,7 @@ export class CookieTransport implements SessionTransport {
     req: RequestLike,
     tenant: TenantClients,
     tenantName: TenantName,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): Promise<ResolvedSession | null> {
     const cookieHeader = firstHeaderValue(req.headers['cookie']);
     if (!cookieHeader) return null;
@@ -65,7 +65,7 @@ export class CookieTransport implements SessionTransport {
 
   public credentialFingerprint(
     req: RequestLike,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): string | null {
     const cookieHeader = firstHeaderValue(req.headers['cookie']);
     if (!cookieHeader) return null;

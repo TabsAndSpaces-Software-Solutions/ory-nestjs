@@ -36,7 +36,7 @@ import {
 import type { AuditSink } from '../../../src/audit';
 import type { TenantName, IamAuditEvent } from '../../../src/dto';
 import type { TenantClients } from '../../../src/clients';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantRegistry } from '../../../src/module/registry/tenant-registry.service';
 import type { RequirePermissionSpec } from '../../../src/decorators/require-permission.decorator';
 import { correlationStorage } from '../../../src/clients/correlation-storage';
@@ -83,7 +83,7 @@ function makeSink(): { sink: AuditSink; emitted: IamAuditEvent[] } {
   return { sink, emitted };
 }
 
-function makeTenantConfig(): TenantConfig {
+function makeTenantConfig(): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'cookie',
@@ -91,7 +91,7 @@ function makeTenantConfig(): TenantConfig {
       publicUrl: 'http://kratos.test',
       sessionCookieName: 'ory_kratos_session',
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 interface KetoPermissionStub {
@@ -159,10 +159,45 @@ describe('PermissionGuard', () => {
     reflector = new Reflector();
   });
 
+  it('regression: unwraps the Axios response and reads .data.allowed (NOT response.allowed)', async () => {
+    // Earlier revisions read `result.allowed === true` on the raw Axios
+    // response — always `undefined`, so every request 403'd even when Keto
+    // answered `allowed: true`. The real `@ory/client` SDK returns
+    // `AxiosResponse<CheckPermissionResult>` where the flag lives on
+    // `.data.allowed`. This test locks the correct shape in.
+    const { sink, emitted } = makeSink();
+    const keto: KetoPermissionStub = {
+      // Simulates the REAL `@ory/client` shape: { data, status, headers }.
+      checkPermission: jest.fn().mockResolvedValue({
+        data: { allowed: true },
+        status: 200,
+        headers: {},
+      }),
+    };
+    const clients = makeTenantClients('demo', { keto });
+    const registry = makeRegistry({ tenants: { demo: clients }, defaultTenant: 'demo' });
+    const guard = new PermissionGuard(reflector, registry, sink);
+
+    const handler = function h(): void {};
+    Reflect.defineMetadata(
+      REQUIRED_PERMISSION_KEY,
+      { namespace: 'listings', relation: 'view', object: 'listings:42' },
+      handler,
+    );
+    const ctx = makeCtx({
+      request: { user: { id: 'u1', tenant: 'demo' } },
+      handler,
+    });
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(keto.checkPermission).toHaveBeenCalledTimes(1);
+    expect(emitted.map((e) => e.event)).toContain('authz.permission.grant');
+  });
+
   it('returns true when no @RequirePermission metadata is present (no-op)', async () => {
     const { sink, emitted } = makeSink();
     const keto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: true }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: true } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({
@@ -342,7 +377,7 @@ describe('PermissionGuard', () => {
   it('allows on Keto allowed:true, emits authz.permission.grant', async () => {
     const { sink, emitted } = makeSink();
     const keto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: true }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: true } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({
@@ -392,7 +427,7 @@ describe('PermissionGuard', () => {
   it('denies on Keto allowed:false, throws ForbiddenException, emits authz.permission.deny', async () => {
     const { sink, emitted } = makeSink();
     const keto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: false }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: false } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({
@@ -516,7 +551,7 @@ describe('PermissionGuard', () => {
   it('calls the object resolver with the raw request', async () => {
     const { sink } = makeSink();
     const keto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: true }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: true } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({
@@ -559,8 +594,8 @@ describe('PermissionGuard', () => {
     const keto: KetoPermissionStub = {
       checkPermission: jest
         .fn()
-        .mockResolvedValueOnce({ allowed: true })
-        .mockResolvedValueOnce({ allowed: true }),
+        .mockResolvedValueOnce({ data: { allowed: true } })
+        .mockResolvedValueOnce({ data: { allowed: true } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({
@@ -596,8 +631,8 @@ describe('PermissionGuard', () => {
     const keto: KetoPermissionStub = {
       checkPermission: jest
         .fn()
-        .mockResolvedValueOnce({ allowed: true })
-        .mockResolvedValueOnce({ allowed: false }),
+        .mockResolvedValueOnce({ data: { allowed: true } })
+        .mockResolvedValueOnce({ data: { allowed: false } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({
@@ -630,7 +665,7 @@ describe('PermissionGuard', () => {
   it('propagates correlationId from correlationStorage into audit events', async () => {
     const { sink, emitted } = makeSink();
     const keto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: false }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: false } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({
@@ -664,10 +699,10 @@ describe('PermissionGuard', () => {
   it('route-level @Tenant(customer) overrides registry defaultTenant', async () => {
     const { sink } = makeSink();
     const customerKeto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: true }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: true } }),
     };
     const adminKeto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: true }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: true } }),
     };
     const admin = makeTenantClients('admin', { keto: adminKeto });
     const customer = makeTenantClients('customer', { keto: customerKeto });
@@ -699,7 +734,7 @@ describe('PermissionGuard', () => {
   it('reads metadata via Reflector.getAllAndOverride([handler, class])', async () => {
     const { sink } = makeSink();
     const keto: KetoPermissionStub = {
-      checkPermission: jest.fn().mockResolvedValue({ allowed: true }),
+      checkPermission: jest.fn().mockResolvedValue({ data: { allowed: true } }),
     };
     const clients = makeTenantClients('demo', { keto });
     const registry = makeRegistry({

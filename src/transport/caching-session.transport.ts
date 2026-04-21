@@ -46,7 +46,7 @@
 import { Logger } from '@nestjs/common';
 
 import type { SessionCache } from '../cache';
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantClients } from '../clients';
 import type { TenantName } from '../dto';
 import type {
@@ -90,7 +90,7 @@ export class CachingSessionTransport implements SessionTransport {
     req: RequestLike,
     tenant: TenantClients,
     tenantName: TenantName,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): Promise<ResolvedSession | null> {
     const fingerprint = this.safeFingerprint(req, tenantConfig);
     if (fingerprint === null) {
@@ -136,14 +136,14 @@ export class CachingSessionTransport implements SessionTransport {
 
   public credentialFingerprint(
     req: RequestLike,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): string | null {
     return this.safeFingerprint(req, tenantConfig);
   }
 
   private safeFingerprint(
     req: RequestLike,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): string | null {
     if (this.inner.credentialFingerprint === undefined) return null;
     try {

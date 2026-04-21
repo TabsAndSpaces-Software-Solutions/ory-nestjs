@@ -16,11 +16,11 @@ import nock from 'nock';
 import { Redactor } from '../../../src/audit';
 import { AxiosFactory } from '../../../src/clients/axios.factory';
 import { OryClientFactory } from '../../../src/clients/ory-client.factory';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 
 const BASE = 'https://kratos.test';
 
-function mkTenant(): TenantConfig {
+function mkTenant(): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'cookie-or-bearer',
@@ -28,7 +28,7 @@ function mkTenant(): TenantConfig {
       publicUrl: BASE,
       sessionCookieName: 'ory_kratos_session',
     },
-  } as TenantConfig;
+  } as ValidatedTenantConfig;
 }
 
 describe('FrontendApi.toSession contract', () => {

@@ -7,9 +7,9 @@ import * as https from 'node:https';
 
 import { Redactor } from '../../../src/audit';
 import { AxiosFactory } from '../../../src/clients/axios.factory';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 
-function mkTenant(overrides: Partial<TenantConfig> = {}): TenantConfig {
+function mkTenant(overrides: Partial<ValidatedTenantConfig> = {}): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'bearer',
@@ -18,7 +18,7 @@ function mkTenant(overrides: Partial<TenantConfig> = {}): TenantConfig {
       sessionCookieName: 'ory_kratos_session',
     },
     ...overrides,
-  } as TenantConfig;
+  } as ValidatedTenantConfig;
 }
 
 describe('AxiosFactory.create', () => {
@@ -33,7 +33,7 @@ describe('AxiosFactory.create', () => {
 
   it('applies a custom timeout when tenant.timeoutMs is provided', () => {
     const instance = AxiosFactory.create(
-      mkTenant({ timeoutMs: 2500 } as unknown as TenantConfig),
+      mkTenant({ timeoutMs: 2500 } as unknown as ValidatedTenantConfig),
       { redactor },
     );
     expect(instance.defaults.timeout).toBe(2500);

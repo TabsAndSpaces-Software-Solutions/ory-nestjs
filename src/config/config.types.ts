@@ -9,6 +9,7 @@
 import type {
   IamOptionsInput,
   IamOptionsOutput,
+  TenantConfigInput,
   TenantConfigOutput,
 } from './config.schema';
 
@@ -30,9 +31,32 @@ export type IamOptions = IamOptionsInput;
 export type ValidatedIamOptions = IamOptionsOutput;
 
 /**
- * Per-tenant configuration block (output shape, defaults applied).
+ * Per-tenant configuration block — **input** shape.
+ *
+ * This is what consumers write inside `tenants: { default: { … } }` when
+ * calling `IamModule.forRoot(...)`. Fields with zod-level defaults
+ * (`kratos.sessionCookieName`, `oathkeeper.clockSkewMs`, etc.) are
+ * optional at the call site. Consumers who factor a tenant out into a
+ * shared helper should annotate the helper's return type with this,
+ * not `ValidatedTenantConfig` — the latter requires every default to be
+ * present in the literal.
+ *
+ * Breaking change in 0.4.0: before 0.4.0, this alias pointed at the
+ * post-validation (output) shape, which forced every consumer factory
+ * to redundantly supply defaulted fields. The two shapes are now
+ * exported under distinct names so the call-site type reflects the
+ * call-site ergonomics.
  */
-export type TenantConfig = TenantConfigOutput;
+export type TenantConfig = TenantConfigInput;
+
+/**
+ * Per-tenant configuration block — **validated output** shape, with all
+ * defaults applied. This is what `ConfigLoader.load()` returns and what
+ * the library's internals (transports, factory, health indicator) read.
+ * Consumers rarely need this directly; use it only when writing code
+ * that relies on defaulted fields being present.
+ */
+export type ValidatedTenantConfig = TenantConfigOutput;
 
 /**
  * Supported tenant deployment modes.

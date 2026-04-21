@@ -35,7 +35,7 @@ import type {
   IamMachinePrincipal,
 } from '../../../src/dto';
 import type { TenantClients } from '../../../src/clients';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantRegistry } from '../../../src/module/registry/tenant-registry.service';
 
 interface MockRequest {
@@ -80,7 +80,7 @@ function makeSink(): {
   return { sink, emitted };
 }
 
-function makeTenantConfig(): TenantConfig {
+function makeTenantConfig(): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'bearer',
@@ -92,7 +92,7 @@ function makeTenantConfig(): TenantConfig {
       publicUrl: 'http://hydra.test',
       adminUrl: 'http://hydra-admin.test',
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 interface IntrospectResult {
@@ -106,7 +106,7 @@ interface IntrospectResult {
 
 function makeTenantClients(
   name: TenantName,
-  config: TenantConfig,
+  config: ValidatedTenantConfig,
   introspect?: jest.Mock<Promise<{ data: IntrospectResult }>, [unknown]>,
 ): TenantClients {
   const hydraOauth2 = introspect

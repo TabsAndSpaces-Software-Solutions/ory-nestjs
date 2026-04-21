@@ -1,7 +1,7 @@
 /**
  * Unit tests for CookieOrBearerTransport — cookie-first, bearer-fallback.
  */
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantClients } from '../../../src/clients';
 import { CookieOrBearerTransport } from '../../../src/transport/cookie-or-bearer.transport';
 import type { RequestLike } from '../../../src/transport/session-transport.interface';
@@ -10,13 +10,13 @@ import { activeOrySession } from '../../../src/dto/mappers/__fixtures__/session.
 function makeTenant(toSession: jest.Mock): TenantClients {
   return {
     tenant: 'tenant-a',
-    config: {} as TenantConfig,
+    config: {} as ValidatedTenantConfig,
     axios: {} as TenantClients['axios'],
     kratosFrontend: { toSession } as unknown as TenantClients['kratosFrontend'],
   };
 }
 
-function makeTenantConfig(): TenantConfig {
+function makeTenantConfig(): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'cookie-or-bearer',
@@ -24,7 +24,7 @@ function makeTenantConfig(): TenantConfig {
       publicUrl: 'http://kratos.test',
       sessionCookieName: 'ory_kratos_session',
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 describe('CookieOrBearerTransport', () => {

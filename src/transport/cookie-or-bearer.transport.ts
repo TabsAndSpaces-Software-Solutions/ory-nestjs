@@ -5,7 +5,7 @@
  * throws), that outcome is returned. Otherwise the bearer transport is tried.
  * If neither yields a result, returns `null`.
  */
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantClients } from '../clients';
 import type { TenantName } from '../dto';
 import { BearerTransport } from './bearer.transport';
@@ -32,7 +32,7 @@ export class CookieOrBearerTransport implements SessionTransport {
     req: RequestLike,
     tenant: TenantClients,
     tenantName: TenantName,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): Promise<ResolvedSession | null> {
     const cookieResult = await this.cookie.resolve(req, tenant, tenantName, tenantConfig);
     if (cookieResult !== null) return cookieResult;
@@ -41,7 +41,7 @@ export class CookieOrBearerTransport implements SessionTransport {
 
   public credentialFingerprint(
     req: RequestLike,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): string | null {
     // Mirror `resolve`'s precedence — cookie first, bearer fallback. The
     // inner transports already prefix their fingerprints with 'c:' / 'b:'

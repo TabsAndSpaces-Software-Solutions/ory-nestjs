@@ -10,7 +10,7 @@
  * This is the ONLY place in the library allowed to read raw cookies or
  * headers off the request.
  */
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantClients } from '../clients';
 import type { TenantName, IamIdentity, IamSession } from '../dto';
 
@@ -41,7 +41,7 @@ export interface SessionTransport {
     req: RequestLike,
     tenant: TenantClients,
     tenantName: TenantName,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): Promise<ResolvedSession | null>;
 
   /**
@@ -62,6 +62,6 @@ export interface SessionTransport {
    */
   credentialFingerprint?(
     req: RequestLike,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): string | null;
 }

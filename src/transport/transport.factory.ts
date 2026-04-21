@@ -28,7 +28,7 @@ import {
   type ReplayCache,
   type SessionCache,
 } from '../cache';
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import { BearerTransport } from './bearer.transport';
 import { CachingSessionTransport } from './caching-session.transport';
 import { CookieTransport } from './cookie.transport';
@@ -47,7 +47,7 @@ export class TransportFactory {
     @Optional() @Inject(REPLAY_CACHE) private readonly replayCache?: ReplayCache,
   ) {}
 
-  public forTenant(tenantConfig: TenantConfig): SessionTransport {
+  public forTenant(tenantConfig: ValidatedTenantConfig): SessionTransport {
     const base = this.buildBase(tenantConfig);
     const ttlMs = tenantConfig.cache?.sessionTtlMs ?? 0;
     if (ttlMs > 0 && this.cache !== undefined) {
@@ -58,7 +58,7 @@ export class TransportFactory {
     return base;
   }
 
-  private buildBase(tenantConfig: TenantConfig): SessionTransport {
+  private buildBase(tenantConfig: ValidatedTenantConfig): SessionTransport {
     switch (tenantConfig.transport) {
       case 'cookie':
         return new CookieTransport();

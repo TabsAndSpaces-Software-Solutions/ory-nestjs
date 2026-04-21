@@ -5,7 +5,7 @@
  * a SessionCache backend is registered on the factory.
  */
 import { InMemorySessionCache } from '../../../src/cache';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import { TransportFactory } from '../../../src/transport/transport.factory';
 import { CachingSessionTransport } from '../../../src/transport/caching-session.transport';
 import { CookieTransport } from '../../../src/transport/cookie.transport';
@@ -14,9 +14,9 @@ import { CookieOrBearerTransport } from '../../../src/transport/cookie-or-bearer
 import { OathkeeperTransport } from '../../../src/transport/oathkeeper.transport';
 
 function cfg(
-  transport: TenantConfig['transport'],
-  overrides: Partial<TenantConfig> = {},
-): TenantConfig {
+  transport: ValidatedTenantConfig['transport'],
+  overrides: Partial<ValidatedTenantConfig> = {},
+): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport,
@@ -30,7 +30,7 @@ function cfg(
       signerKeys: ['k1'],
     },
     ...overrides,
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 describe('TransportFactory.forTenant', () => {
@@ -61,14 +61,14 @@ describe('TransportFactory.forTenant', () => {
   it('throws on an unsupported transport kind', () => {
     const factory = new TransportFactory();
     expect(() =>
-      factory.forTenant(cfg('bogus' as unknown as TenantConfig['transport'])),
+      factory.forTenant(cfg('bogus' as unknown as ValidatedTenantConfig['transport'])),
     ).toThrow();
   });
 
   it('does NOT wrap in CachingSessionTransport when sessionTtlMs is 0', () => {
     const factory = new TransportFactory(new InMemorySessionCache());
     const t = factory.forTenant(
-      cfg('cookie', { cache: { sessionTtlMs: 0, permissionTtlMs: 0, jwksTtlMs: 0 } } as Partial<TenantConfig>),
+      cfg('cookie', { cache: { sessionTtlMs: 0, permissionTtlMs: 0, jwksTtlMs: 0 } } as Partial<ValidatedTenantConfig>),
     );
     expect(t).toBeInstanceOf(CookieTransport);
     expect(t).not.toBeInstanceOf(CachingSessionTransport);
@@ -77,7 +77,7 @@ describe('TransportFactory.forTenant', () => {
   it('does NOT wrap when no SessionCache is registered, even if sessionTtlMs > 0', () => {
     const factory = new TransportFactory();
     const t = factory.forTenant(
-      cfg('cookie', { cache: { sessionTtlMs: 60_000, permissionTtlMs: 0, jwksTtlMs: 0 } } as Partial<TenantConfig>),
+      cfg('cookie', { cache: { sessionTtlMs: 60_000, permissionTtlMs: 0, jwksTtlMs: 0 } } as Partial<ValidatedTenantConfig>),
     );
     expect(t).toBeInstanceOf(CookieTransport);
     expect(t).not.toBeInstanceOf(CachingSessionTransport);
@@ -86,7 +86,7 @@ describe('TransportFactory.forTenant', () => {
   it('wraps in CachingSessionTransport when sessionTtlMs > 0 AND a cache is registered', () => {
     const factory = new TransportFactory(new InMemorySessionCache());
     const t = factory.forTenant(
-      cfg('cookie', { cache: { sessionTtlMs: 60_000, permissionTtlMs: 0, jwksTtlMs: 0 } } as Partial<TenantConfig>),
+      cfg('cookie', { cache: { sessionTtlMs: 60_000, permissionTtlMs: 0, jwksTtlMs: 0 } } as Partial<ValidatedTenantConfig>),
     );
     expect(t).toBeInstanceOf(CachingSessionTransport);
   });

@@ -13,14 +13,14 @@
  */
 import type { TenantClients } from '../../../../src/clients';
 import type {
-  TenantConfig,
+  ValidatedTenantConfig,
   ValidatedIamOptions,
 } from '../../../../src/config';
 import type { TenantName } from '../../../../src/dto';
 import { IamConfigurationError } from '../../../../src/errors';
 import { TenantRegistry } from '../../../../src/module/registry/tenant-registry.service';
 
-function tenantConfig(publicUrl: string): TenantConfig {
+function tenantConfig(publicUrl: string): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'bearer',
@@ -28,10 +28,10 @@ function tenantConfig(publicUrl: string): TenantConfig {
       publicUrl,
       sessionCookieName: 'ory_kratos_session',
     },
-  } as TenantConfig;
+  } as ValidatedTenantConfig;
 }
 
-function fakeClients(tenant: TenantName, config: TenantConfig): TenantClients {
+function fakeClients(tenant: TenantName, config: ValidatedTenantConfig): TenantClients {
   return {
     tenant,
     config,
@@ -43,7 +43,7 @@ function fakeClients(tenant: TenantName, config: TenantConfig): TenantClients {
 }
 
 function optionsWith(
-  tenants: Record<string, TenantConfig>,
+  tenants: Record<string, ValidatedTenantConfig>,
   defaultTenant?: string,
 ): ValidatedIamOptions {
   return {
@@ -56,7 +56,7 @@ function optionsWith(
 describe('TenantRegistry', () => {
   describe('construction', () => {
     it('invokes the builder once per declared tenant and caches results', () => {
-      const build = jest.fn<TenantClients, [TenantName, TenantConfig]>(
+      const build = jest.fn<TenantClients, [TenantName, ValidatedTenantConfig]>(
         (name, cfg) => fakeClients(name, cfg),
       );
       const opts = optionsWith(
@@ -114,7 +114,7 @@ describe('TenantRegistry', () => {
 
     it('throws if `defaultTenant` is set to a name not present in tenants', () => {
       // ConfigLoader already rejects this; Registry defends too.
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith(
@@ -130,7 +130,7 @@ describe('TenantRegistry', () => {
 
   describe('defaultTenant()', () => {
     it('returns the explicitly-configured defaultTenant when set', () => {
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith(
@@ -145,7 +145,7 @@ describe('TenantRegistry', () => {
     });
 
     it('derives the default when exactly one tenant is declared', () => {
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith({ solo: tenantConfig('https://solo.test') });
@@ -157,7 +157,7 @@ describe('TenantRegistry', () => {
       // This branch is unreachable through `ConfigLoader` (it rejects the
       // input), but Registry must still return undefined defensively if
       // another caller bypasses the loader.
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith({
@@ -171,7 +171,7 @@ describe('TenantRegistry', () => {
 
   describe('get() / tryGet() / list()', () => {
     it('get(name) throws IamConfigurationError for unknown tenants', () => {
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith({ solo: tenantConfig('https://solo.test') });
@@ -186,7 +186,7 @@ describe('TenantRegistry', () => {
     });
 
     it('tryGet(name) returns undefined for unknown tenants', () => {
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith({ solo: tenantConfig('https://solo.test') });
@@ -196,7 +196,7 @@ describe('TenantRegistry', () => {
     });
 
     it('tryGet(name) returns the same TenantClients instance as get(name) for known tenants', () => {
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith({ solo: tenantConfig('https://solo.test') });
@@ -206,7 +206,7 @@ describe('TenantRegistry', () => {
     });
 
     it('get(name) returns the same TenantClients instance across repeated calls (idempotent)', () => {
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith(
@@ -228,7 +228,7 @@ describe('TenantRegistry', () => {
     });
 
     it('list() returns every declared tenant name', () => {
-      const build = jest.fn((name: TenantName, cfg: TenantConfig) =>
+      const build = jest.fn((name: TenantName, cfg: ValidatedTenantConfig) =>
         fakeClients(name, cfg),
       );
       const opts = optionsWith(

@@ -81,7 +81,7 @@ import {
 } from '../clients';
 import {
   ConfigLoader,
-  type TenantConfig,
+  type ValidatedTenantConfig,
   type IamOptions,
   type ValidatedIamOptions,
 } from '../config';
@@ -130,7 +130,7 @@ const TENANT_CLIENTS_BUILDER: unique symbol = Symbol.for(
 
 type TenantClientsBuilderFn = (
   name: TenantName,
-  cfg: TenantConfig,
+  cfg: ValidatedTenantConfig,
 ) => TenantClients;
 
 /**
@@ -489,7 +489,7 @@ export class IamModule {
       {
         provide: TENANT_CLIENTS_BUILDER,
         useFactory: (redactor: Redactor): TenantClientsBuilderFn => {
-          return (name: TenantName, cfg: TenantConfig): TenantClients => {
+          return (name: TenantName, cfg: ValidatedTenantConfig): TenantClients => {
             const axios = AxiosFactory.create(cfg, { redactor });
             return OryClientFactory.build(name, cfg, { axios });
           };

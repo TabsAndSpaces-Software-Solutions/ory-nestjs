@@ -1,6 +1,6 @@
 /**
  * Unit tests for `OryClientFactory.build(tenant, deps)` — assembles a
- * `TenantClients` bundle from a TenantConfig and a pre-built axios
+ * `TenantClients` bundle from a ValidatedTenantConfig and a pre-built axios
  * instance.
  */
 import axios, { AxiosInstance } from 'axios';
@@ -13,13 +13,13 @@ import {
 } from '@ory/client';
 
 import { OryClientFactory } from '../../../src/clients/ory-client.factory';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 
 function mkAxios(): AxiosInstance {
   return axios.create();
 }
 
-function selfHostedKratosOnly(): TenantConfig {
+function selfHostedKratosOnly(): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'bearer',
@@ -27,10 +27,10 @@ function selfHostedKratosOnly(): TenantConfig {
       publicUrl: 'https://kratos.test/public',
       sessionCookieName: 'ory_kratos_session',
     },
-  } as TenantConfig;
+  } as ValidatedTenantConfig;
 }
 
-function selfHostedFull(): TenantConfig {
+function selfHostedFull(): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'cookie-or-bearer',
@@ -50,10 +50,10 @@ function selfHostedFull(): TenantConfig {
       adminToken: 'secret-hydra-admin',
     },
     trustProxy: true,
-  } as TenantConfig;
+  } as ValidatedTenantConfig;
 }
 
-function cloudTenant(): TenantConfig {
+function cloudTenant(): ValidatedTenantConfig {
   return {
     mode: 'cloud',
     transport: 'bearer',
@@ -65,7 +65,7 @@ function cloudTenant(): TenantConfig {
       projectSlug: 'myslug',
       apiKey: 'ory_pat_xxx',
     },
-  } as TenantConfig;
+  } as ValidatedTenantConfig;
 }
 
 describe('OryClientFactory.build', () => {

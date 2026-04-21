@@ -3,7 +3,7 @@
  * full `TenantClients` bundle for a tenant from:
  *   - the shared-per-tenant `AxiosInstance` (caller provides it; see
  *     `AxiosFactory.create`),
- *   - the tenant's validated `TenantConfig`,
+ *   - the tenant's validated `ValidatedTenantConfig`,
  *   - product selection (Kratos always; admin/keto/hydra by config).
  *
  * Design notes:
@@ -39,7 +39,7 @@ import {
   RelationshipApi,
 } from '@ory/client';
 
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantName } from '../dto';
 import type { TenantClients } from './tenant-clients';
 
@@ -56,7 +56,7 @@ export class OryClientFactory {
 
   public static build(
     tenant: TenantName,
-    config: TenantConfig,
+    config: ValidatedTenantConfig,
     deps: OryClientFactoryDeps,
   ): TenantClients {
     if (config.mode === 'cloud') {
@@ -67,7 +67,7 @@ export class OryClientFactory {
 
   private static buildSelfHosted(
     tenant: TenantName,
-    config: TenantConfig,
+    config: ValidatedTenantConfig,
     deps: OryClientFactoryDeps,
   ): TenantClients {
     const { axios } = deps;
@@ -137,7 +137,7 @@ export class OryClientFactory {
 
   private static buildCloud(
     tenant: TenantName,
-    config: TenantConfig,
+    config: ValidatedTenantConfig,
     deps: OryClientFactoryDeps,
   ): TenantClients {
     const { axios } = deps;

@@ -28,14 +28,14 @@ import { ServiceUnavailableException } from '@nestjs/common';
 
 import { TokenService } from '../../../src/services/token.service';
 import type { TenantClients } from '../../../src/clients';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantName } from '../../../src/dto';
 import { IamConfigurationError } from '../../../src/errors';
 import type { TenantRegistry } from '../../../src/module/registry/tenant-registry.service';
 
 // ---------- helpers ----------
 
-function makeTenantConfig(overrides: Partial<TenantConfig> = {}): TenantConfig {
+function makeTenantConfig(overrides: Partial<ValidatedTenantConfig> = {}): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'bearer',
@@ -44,7 +44,7 @@ function makeTenantConfig(overrides: Partial<TenantConfig> = {}): TenantConfig {
       sessionCookieName: 'ory_kratos_session',
     },
     ...overrides,
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 function makeHydraConfig(
@@ -52,7 +52,7 @@ function makeHydraConfig(
     clientId?: string;
     clientSecret?: string;
   } = {},
-): TenantConfig {
+): ValidatedTenantConfig {
   return makeTenantConfig({
     hydra: {
       publicUrl: 'http://hydra.test',
@@ -60,12 +60,12 @@ function makeHydraConfig(
       clientId: overrides.clientId,
       clientSecret: overrides.clientSecret,
     },
-  } as Partial<TenantConfig>);
+  } as Partial<ValidatedTenantConfig>);
 }
 
 function makeTenantClients(
   name: TenantName,
-  config: TenantConfig,
+  config: ValidatedTenantConfig,
   overrides: Partial<TenantClients> = {},
 ): TenantClients {
   return {

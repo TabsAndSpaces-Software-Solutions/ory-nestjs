@@ -29,7 +29,7 @@ import {
 import { SessionService } from '../../../src/services/session.service';
 import { AUDIT_SINK, type AuditSink } from '../../../src/audit';
 import type { TenantClients } from '../../../src/clients';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type {
   TenantName,
   IamAuditEvent,
@@ -69,7 +69,7 @@ function makeSink(): {
   return { sink, emitted };
 }
 
-function makeTenantConfig(transport: TenantConfig['transport']): TenantConfig {
+function makeTenantConfig(transport: ValidatedTenantConfig['transport']): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport,
@@ -77,12 +77,12 @@ function makeTenantConfig(transport: TenantConfig['transport']): TenantConfig {
       publicUrl: 'http://kratos.test',
       sessionCookieName: 'ory_kratos_session',
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 function makeTenantClients(
   name: TenantName,
-  config: TenantConfig,
+  config: ValidatedTenantConfig,
   overrides: Partial<TenantClients> = {},
 ): TenantClients {
   return {
@@ -141,7 +141,7 @@ function stubTransportForTenant(
     req: RequestLike,
     tenant: TenantClients,
     tenantName: TenantName,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ) => Promise<ResolvedSession | null>,
 ): jest.Mock {
   const transport: SessionTransport = { resolve: impl };

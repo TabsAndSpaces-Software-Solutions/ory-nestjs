@@ -5,7 +5,7 @@
  * Tests stub `tenant.kratosFrontend.toSession` with Jest spies — no real Ory
  * calls.
  */
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantClients } from '../../../src/clients';
 import { CookieTransport } from '../../../src/transport/cookie.transport';
 import type { RequestLike } from '../../../src/transport/session-transport.interface';
@@ -17,7 +17,7 @@ import { activeOrySession } from '../../../src/dto/mappers/__fixtures__/session.
 function makeTenant(toSession: jest.Mock): TenantClients {
   return {
     tenant: 'tenant-a',
-    config: { kratos: { sessionCookieName: 'ory_kratos_session' } } as TenantConfig,
+    config: { kratos: { sessionCookieName: 'ory_kratos_session' } } as ValidatedTenantConfig,
     axios: {} as TenantClients['axios'],
     kratosFrontend: { toSession } as unknown as TenantClients['kratosFrontend'],
   };
@@ -25,7 +25,7 @@ function makeTenant(toSession: jest.Mock): TenantClients {
 
 function makeTenantConfig(
   cookieName = 'ory_kratos_session',
-): TenantConfig {
+): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'cookie',
@@ -33,7 +33,7 @@ function makeTenantConfig(
       publicUrl: 'http://kratos.test',
       sessionCookieName: cookieName,
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 describe('CookieTransport', () => {

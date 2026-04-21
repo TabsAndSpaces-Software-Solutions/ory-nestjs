@@ -3,7 +3,7 @@
  * from the Ory Oathkeeper proxy.
  */
 import * as crypto from 'crypto';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantClients } from '../../../src/clients';
 import { OathkeeperTransport } from '../../../src/transport/oathkeeper.transport';
 import type { RequestLike } from '../../../src/transport/session-transport.interface';
@@ -12,7 +12,7 @@ import { IamUnauthorizedError } from '../../../src/errors';
 function makeTenant(toSession: jest.Mock = jest.fn()): TenantClients {
   return {
     tenant: 'tenant-a',
-    config: {} as TenantConfig,
+    config: {} as ValidatedTenantConfig,
     axios: {} as TenantClients['axios'],
     kratosFrontend: { toSession } as unknown as TenantClients['kratosFrontend'],
   };
@@ -29,7 +29,7 @@ interface OathkeeperOptions {
   replayProtection?: { enabled: boolean; ttlMs?: number };
 }
 
-function makeTenantConfig(opts: OathkeeperOptions = {}): TenantConfig {
+function makeTenantConfig(opts: OathkeeperOptions = {}): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport: 'oathkeeper',
@@ -50,7 +50,7 @@ function makeTenantConfig(opts: OathkeeperOptions = {}): TenantConfig {
           ? undefined
           : { enabled: opts.replayProtection.enabled, ttlMs: opts.replayProtection.ttlMs ?? 60_000 },
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 function signBase64(envelope: string, key: string): string {
@@ -253,7 +253,7 @@ describe('OathkeeperTransport', () => {
       mode: 'self-hosted',
       transport: 'oathkeeper',
       kratos: { publicUrl: 'http://kratos.test', sessionCookieName: 'x' },
-    } as unknown as TenantConfig;
+    } as unknown as ValidatedTenantConfig;
     await expect(
       transport.resolve(req, tenant, 'tenant-a', config),
     ).rejects.toBeInstanceOf(IamUnauthorizedError);
@@ -539,5 +539,46 @@ describe('OathkeeperTransport — JWT verifier with inline JWKS', () => {
         }),
       ),
     ).rejects.toMatchObject({ message: 'audience_mismatch' });
+  });
+
+  it('strips a "Bearer " prefix from the identity header (Oathkeeper id_token mutator writes Authorization: Bearer …)', async () => {
+    const transport = new OathkeeperTransport();
+    const jwt = await signJwt({ sub: 'u_bearer', tenant: 'tenant-a' });
+    const req: RequestLike = {
+      headers: { authorization: `Bearer ${jwt}` },
+    };
+    const result = await transport.resolve(
+      req,
+      makeTenant(),
+      'tenant-a',
+      makeTenantConfig({
+        verifier: 'jwt',
+        identityHeader: 'Authorization',
+        jwks: { keys: [jwk], algorithms: ['RS256'], refreshIntervalMs: 600_000, cooldownMs: 30_000 },
+      }),
+    );
+    expect(result).not.toBeNull();
+    expect(result?.identity.id).toBe('u_bearer');
+  });
+
+  it('HMAC mode does NOT strip a "Bearer " prefix (envelope bytes must reach the signature verifier untouched)', async () => {
+    const transport = new OathkeeperTransport();
+    const envelope = JSON.stringify({
+      id: 'u_1',
+      schemaId: 'default',
+      state: 'active',
+      tenant: 'tenant-a',
+    });
+    const sig = signBase64(envelope, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': envelope, 'x-user-signature': sig },
+    };
+    const result = await transport.resolve(
+      req,
+      makeTenant(),
+      'tenant-a',
+      makeTenantConfig({ verifier: 'hmac', signerKeys: ['primary-key'] }),
+    );
+    expect(result).not.toBeNull();
   });
 });

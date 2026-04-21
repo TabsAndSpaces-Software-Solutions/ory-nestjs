@@ -26,7 +26,7 @@ import type {
   IamSession,
 } from '../../../src/dto';
 import type { TenantClients } from '../../../src/clients';
-import type { TenantConfig } from '../../../src/config';
+import type { ValidatedTenantConfig } from '../../../src/config';
 import type { TenantRegistry } from '../../../src/module/registry/tenant-registry.service';
 import type {
   RequestLike,
@@ -81,7 +81,7 @@ function makeSink(): {
   return { sink, emitted };
 }
 
-function makeTenantConfig(transport: TenantConfig['transport']): TenantConfig {
+function makeTenantConfig(transport: ValidatedTenantConfig['transport']): ValidatedTenantConfig {
   return {
     mode: 'self-hosted',
     transport,
@@ -94,12 +94,12 @@ function makeTenantConfig(transport: TenantConfig['transport']): TenantConfig {
       signatureHeader: 'x-user-signature',
       signerKeys: ['k1'],
     },
-  } as unknown as TenantConfig;
+  } as unknown as ValidatedTenantConfig;
 }
 
 function makeTenantClients(
   name: TenantName,
-  config: TenantConfig,
+  config: ValidatedTenantConfig,
 ): TenantClients {
   return {
     tenant: name,
@@ -156,7 +156,7 @@ function stubTransportForTenant(
     req: RequestLike,
     tenant: TenantClients,
     tenantName: TenantName,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ) => Promise<ResolvedSession | null>,
 ): jest.Mock {
   const transport: SessionTransport = { resolve: impl };

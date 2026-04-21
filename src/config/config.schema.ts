@@ -311,4 +311,5 @@ export const IamOptionsSchema = z
 // only need the inferred types and the `ConfigLoader` service.
 export type IamOptionsInput = z.input<typeof IamOptionsSchema>;
 export type IamOptionsOutput = z.output<typeof IamOptionsSchema>;
+export type TenantConfigInput = z.input<typeof TenantConfigSchema>;
 export type TenantConfigOutput = z.output<typeof TenantConfigSchema>;

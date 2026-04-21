@@ -41,7 +41,7 @@
  */
 import { Logger } from '@nestjs/common';
 
-import type { TenantConfig } from '../config';
+import type { ValidatedTenantConfig } from '../config';
 import type { TenantClients } from '../clients';
 import type {
   TenantName,
@@ -230,7 +230,7 @@ function buildSession(
  * One verifier instance is built per tenant and cached on the transport.
  * This avoids re-building the JWKS fetcher on every request.
  */
-type JwtCfg = NonNullable<TenantConfig['oathkeeper']>;
+type JwtCfg = NonNullable<ValidatedTenantConfig['oathkeeper']>;
 
 export class OathkeeperTransport implements SessionTransport {
   private readonly logger: Logger;
@@ -248,7 +248,7 @@ export class OathkeeperTransport implements SessionTransport {
     req: RequestLike,
     _tenant: TenantClients,
     tenantName: TenantName,
-    tenantConfig: TenantConfig,
+    tenantConfig: ValidatedTenantConfig,
   ): Promise<ResolvedSession | null> {
     const oathkeeperCfg = tenantConfig.oathkeeper;
     if (!oathkeeperCfg) {
@@ -256,8 +256,18 @@ export class OathkeeperTransport implements SessionTransport {
     }
 
     const identityHeader = oathkeeperCfg.identityHeader;
-    const envelopeRaw = readHeader(req.headers, identityHeader);
+    let envelopeRaw = readHeader(req.headers, identityHeader);
     if (!envelopeRaw) return null;
+
+    // Oathkeeper's `id_token` mutator writes the JWT to the upstream as
+    // `Authorization: Bearer <jwt>` — that prefix is not user-configurable.
+    // Strip it in JWT mode so the raw token reaches `jose.jwtVerify`. HMAC
+    // mode envelopes are opaque JSON/base64 — never prefixed — so we leave
+    // them alone.
+    if (oathkeeperCfg.verifier === 'jwt') {
+      const m = /^Bearer\s+(.+)$/i.exec(envelopeRaw);
+      if (m) envelopeRaw = m[1];
+    }
 
     const start = Date.now();
     const envelope: OathkeeperEnvelope =
@@ -295,7 +305,7 @@ export class OathkeeperTransport implements SessionTransport {
 
   public credentialFingerprint(
     _req: RequestLike,
-    _tenantConfig: TenantConfig,
+    _tenantConfig: ValidatedTenantConfig,
   ): string | null {
     return null;
   }

@@ -68,14 +68,23 @@ import type { TenantRegistry } from '../module/registry/tenant-registry.service'
 /**
  * Structural view of the subset of `PermissionApi` this guard consumes.
  * Real callers wire the Ory SDK instance; tests wire a Jest spy.
+ *
+ * `@ory/client`'s `PermissionApi.checkPermission` returns an
+ * `AxiosResponse<CheckPermissionResult>` — the `allowed` flag lives on
+ * `.data.allowed`, NOT on the response root. Earlier revisions read
+ * `response.allowed` and silently 403'd every request. The shape below
+ * matches the real SDK and is mirrored by `PermissionService.checkImpl`.
  */
+interface KetoCheckResponse {
+  data?: { allowed?: boolean };
+}
 interface KetoPermissionApi {
   checkPermission(input: {
     namespace: string;
     object: string;
     relation: string;
     subjectId: string;
-  }): Promise<{ allowed: boolean }>;
+  }): Promise<KetoCheckResponse>;
 }
 
 /** Structural view of `req.user` fields this guard reads. */
@@ -241,9 +250,9 @@ export class PermissionGuard implements CanActivate {
       correlationId,
     } = args;
 
-    let result: { allowed: boolean };
+    let response: KetoCheckResponse;
     try {
-      result = await keto.checkPermission({
+      response = await keto.checkPermission({
         namespace: spec.namespace,
         object: objectValue,
         relation: spec.relation,
@@ -271,7 +280,7 @@ export class PermissionGuard implements CanActivate {
       });
     }
 
-    if (result.allowed === true) {
+    if (response.data?.allowed === true) {
       await this.audit.emit({
         timestamp: new Date().toISOString(),
         event: 'authz.permission.grant',
