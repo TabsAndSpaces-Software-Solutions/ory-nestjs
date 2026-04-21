@@ -48,6 +48,26 @@ export default defineConfig({
   // NestJS decorator graph is order-sensitive and has historically been
   // fragile under code splitting.
   splitting: false,
-  // Keep the decorator metadata. tsup forwards this to esbuild.
+  // Keep class names so Nest's error messages reference the right class.
   keepNames: true,
 });
+
+/*
+ * Why `@swc/core` is a devDependency of this package
+ * --------------------------------------------------
+ * esbuild alone does NOT emit `design:paramtypes` metadata, which NestJS
+ * DI requires to resolve any constructor parameter that lacks an explicit
+ * `@Inject(...)`. tsup wires up `@swc/core` as a plugin when it's present
+ * and delegates decorator-metadata emission to it; when `@swc/core` is
+ * absent tsup prints:
+ *
+ *   "You have emitDecoratorMetadata enabled but @swc/core was not
+ *    installed, skipping swc plugin"
+ *
+ * ...and the bundle silently ships without metadata — consumer guards
+ * then fail to boot with `Nest can't resolve dependencies`. This was the
+ * root cause of the 0.1.1 incident. `@swc/core` MUST stay listed in
+ * `devDependencies` so `npm ci` installs it; the build-time assertions
+ * in `test/unit/build.test.ts` verify metadata is actually emitted.
+ */
+
