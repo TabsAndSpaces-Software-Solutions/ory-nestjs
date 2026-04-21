@@ -6,6 +6,7 @@
  */
 import type {
   LoginFlow as OryLoginFlow,
+  LogoutFlow as OryLogoutFlow,
   RecoveryFlow as OryRecoveryFlow,
   RegistrationFlow as OryRegistrationFlow,
   SettingsFlow as OrySettingsFlow,
@@ -18,6 +19,7 @@ import { deepFreeze } from '../freeze';
 import type {
   IamFlowUi,
   IamLoginFlow,
+  IamLogoutFlow,
   IamRecoveryFlow,
   IamRegistrationFlow,
   IamSettingsFlow,
@@ -76,5 +78,16 @@ export const flowMapper = {
   },
   verificationFromOry(f: OryVerificationFlow, tenant: TenantName): IamVerificationFlow {
     return deepFreeze(mapFlow(f as unknown as OryLikeFlow, tenant));
+  },
+  logoutFromOry(f: OryLogoutFlow, tenant: TenantName): IamLogoutFlow {
+    const anyF = f as unknown as {
+      logout_token?: unknown;
+      logout_url?: unknown;
+    };
+    return deepFreeze({
+      logoutToken: typeof anyF.logout_token === 'string' ? anyF.logout_token : '',
+      logoutUrl: typeof anyF.logout_url === 'string' ? anyF.logout_url : '',
+      tenant,
+    });
   },
 };

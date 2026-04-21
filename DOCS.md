@@ -1170,8 +1170,13 @@ Everything importable from `ory-nestjs`:
 - **Module**: `IamModule`, `IamAsyncOptions`, `IamOptions`.
 - **Guards**: `SessionGuard`, `OptionalSessionGuard`, `RoleGuard`, `PermissionGuard`, `OAuth2Guard`.
 - **Decorators**: `Public`, `Anonymous`, `Tenant`, `RequireRole`, `RequirePermission`, `CurrentUser`.
-- **Services**: `IdentityService`, `SessionService`, `PermissionService`, `TokenService`, `FlowService`.
-- **DTOs**: `IamIdentity`, `IamIdentityWithTraits`, `IamSession`, `IamPermissionTuple`, `IamPermissionQuery`, `IamToken`, `IamTokenIntrospection`, `IamMachinePrincipal`, `IamLoginFlow`, `IamRegistrationFlow`, `IamRecoveryFlow`, `IamSettingsFlow`, `IamVerificationFlow`, `IamAuditEvent`, `IamFlowUi`.
+- **Services**:
+  - **Kratos**: `IdentityService` (get, getWithTraits, list, create, updateTraits, **patch**, delete, listSessions, revokeSession, **extendSession**), `SessionService` (whoami, whoamiOrNull, revoke), `FlowService` (login / registration / recovery / settings / verification initiate+submit+fetch — browser and native, plus **initiateBrowserLogout / submitBrowserLogout / performNativeLogout**), `SchemaService` (list, get), `CourierService` (list, get — body redacted by default).
+  - **Keto**: `PermissionService` (check, grant, revoke, list, **expand**, **checkBatch**).
+  - **Hydra**: `TokenService` (clientCredentials, introspect, **authorizationCode**, **refresh**, **jwtBearer**, **revoke**), `OAuth2ClientService` (create, get, list, set, patch, delete), `ConsentService` (getLoginRequest / acceptLoginRequest / rejectLoginRequest / consent equivalents / logout equivalents), `JwkService` (createSet, getSet, updateSet, deleteSet, getKey, updateKey, deleteKey), `TrustedIssuerService` (trust, get, list, delete).
+  - **Ory Network**: `ProjectAdminService` (create, list, get, set, purge, listMembers, create/list/deleteApiKey), `WorkspaceAdminService` (create, list, get, update, listProjects, create/list/deleteApiKey), `EventsService` (create, list, set, delete — event-stream CRUD).
+  - **Diagnostics**: `MetadataService` (version, discoverJwks).
+- **DTOs**: `IamIdentity`, `IamIdentityWithTraits`, `IamIdentitySchema`, `IamCourierMessage`, `IamSession`, `IamPermissionTuple`, `IamPermissionQuery`, `IamPermissionTree`, `IamPermissionTreeNode`, `IamPermissionCheckResult`, `IamToken`, `IamTokenIntrospection`, `IamOAuth2Client`, `IamOAuth2ClientInput`, `IamLoginRequest`, `IamConsentRequest`, `IamLogoutRequest`, `IamConsentRedirect`, `IamJsonWebKey`, `IamJsonWebKeySet`, `IamTrustedIssuer`, `IamMachinePrincipal`, `IamLoginFlow`, `IamRegistrationFlow`, `IamRecoveryFlow`, `IamSettingsFlow`, `IamVerificationFlow`, `IamLogoutFlow`, `IamAuditEvent`, `IamFlowUi`, `IamJsonPatchOp`.
 - **Type guards**: `isUserPrincipal`, `isMachinePrincipal`.
 - **Errors**: `IamError`, `IamConfigurationError`, `IamUnauthorizedError`, `IamForbiddenError`, `IamUpstreamUnavailableError`, `ErrorMapper`.
 - **Audit**: `AuditSink` (interface), `AUDIT_SINK` (DI token), `LoggerAuditSink`, `Redactor`, `AuditEventName`.

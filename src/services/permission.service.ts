@@ -41,7 +41,10 @@ import { correlationStorage } from '../clients/correlation-storage';
 import type { TenantClients } from '../clients';
 import type {
   TenantName,
+  IamPermissionCheckResult,
   IamPermissionQuery,
+  IamPermissionTree,
+  IamPermissionTreeNode,
   IamPermissionTuple,
 } from '../dto';
 import { ErrorMapper, IamConfigurationError } from '../errors';
@@ -83,6 +86,28 @@ export interface PermissionServiceFor {
    * plus an optional `nextPageToken` for pagination.
    */
   list(query: IamPermissionQuery): Promise<IamPermissionList>;
+
+  /**
+   * Expand a subject tree for `(namespace, object, relation)` up to
+   * `maxDepth` levels. Useful for "who can access X" introspection.
+   */
+  expand(
+    req: {
+      namespace: string;
+      object: string;
+      relation: string;
+      maxDepth?: number;
+    },
+  ): Promise<IamPermissionTree>;
+
+  /**
+   * Batch-check an array of tuples. Runs concurrently against Keto and
+   * returns one result per input in order. Upstream errors surface per-tuple
+   * via `error` rather than throwing — callers decide fail-open/closed.
+   */
+  checkBatch(
+    tuples: ReadonlyArray<IamPermissionTuple>,
+  ): Promise<IamPermissionCheckResult[]>;
 }
 
 @Injectable()
@@ -109,6 +134,8 @@ export class PermissionService {
       grant: (tuple) => grantImpl(registry, audit, name, tuple),
       revoke: (tuple) => revokeImpl(registry, audit, name, tuple),
       list: (query) => listImpl(registry, name, query),
+      expand: (req) => expandImpl(registry, name, req),
+      checkBatch: (tuples) => checkBatchImpl(registry, name, tuples),
     };
     this.byTenant.set(name, wrapper);
     return wrapper;
@@ -285,6 +312,81 @@ async function listImpl(
       correlationId: currentCorrelationId(),
     });
   }
+}
+
+async function expandImpl(
+  registry: TenantRegistry,
+  tenant: TenantName,
+  req: {
+    namespace: string;
+    object: string;
+    relation: string;
+    maxDepth?: number;
+  },
+): Promise<IamPermissionTree> {
+  const api = requirePermissionApi(registry, tenant);
+  try {
+    const apiAny = api as unknown as {
+      expandPermissions(req: unknown): Promise<{ data: unknown }>;
+    };
+    const payload: Record<string, unknown> = {
+      namespace: req.namespace,
+      object: req.object,
+      relation: req.relation,
+    };
+    if (req.maxDepth !== undefined) payload.maxDepth = req.maxDepth;
+    const { data } = await apiAny.expandPermissions(payload);
+    return { root: mapTreeNode(data), tenant };
+  } catch (err) {
+    throw ErrorMapper.toNest(err, {
+      correlationId: currentCorrelationId(),
+    });
+  }
+}
+
+function mapTreeNode(raw: unknown): IamPermissionTreeNode {
+  const n = (raw ?? {}) as {
+    type?: unknown;
+    tuple?: { namespace?: unknown; object?: unknown; relation?: unknown; subject_id?: unknown };
+    children?: unknown[];
+  };
+  const node: IamPermissionTreeNode = {
+    type: (typeof n.type === 'string' ? n.type : 'unspecified') as IamPermissionTreeNode['type'],
+    ...(n.tuple
+      ? {
+          tuple: {
+            namespace: typeof n.tuple.namespace === 'string' ? n.tuple.namespace : '',
+            object: typeof n.tuple.object === 'string' ? n.tuple.object : '',
+            relation: typeof n.tuple.relation === 'string' ? n.tuple.relation : '',
+            subject: typeof n.tuple.subject_id === 'string' ? n.tuple.subject_id : undefined,
+          },
+        }
+      : {}),
+    ...(Array.isArray(n.children)
+      ? { children: n.children.map(mapTreeNode) }
+      : {}),
+  };
+  return node;
+}
+
+async function checkBatchImpl(
+  registry: TenantRegistry,
+  tenant: TenantName,
+  tuples: ReadonlyArray<IamPermissionTuple>,
+): Promise<IamPermissionCheckResult[]> {
+  // Run all checks concurrently; never let one upstream failure fail the batch.
+  const settled = await Promise.allSettled(
+    tuples.map((t) => checkImpl(registry, tenant, t)),
+  );
+  return settled.map((r, i) => {
+    if (r.status === 'fulfilled') {
+      return { tuple: tuples[i], allowed: r.value };
+    }
+    const reason = r.reason;
+    const msg =
+      reason instanceof Error ? reason.message : String(reason ?? 'error');
+    return { tuple: tuples[i], allowed: false, error: msg };
+  });
 }
 
 // ---------- helpers ----------

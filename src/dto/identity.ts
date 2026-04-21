@@ -29,3 +29,33 @@ export interface IamIdentity {
 export interface IamIdentityWithTraits extends IamIdentity {
   readonly traits: Record<string, unknown>;
 }
+
+/**
+ * Identity schema descriptor — the JSON-Schema fragment used by Kratos
+ * for a given `schema_id`. Consumers typically render `schema` to build
+ * registration/settings forms dynamically.
+ */
+export interface IamIdentitySchema {
+  readonly id: string;
+  readonly schema: Record<string, unknown>;
+  readonly tenant: TenantName;
+}
+
+/**
+ * Delivered courier message metadata. `body` is intentionally redacted by
+ * default (full message bodies contain tokens, recovery codes, and links);
+ * consumers that need the body must opt in via `includeBody: true` at the
+ * service call site.
+ */
+export interface IamCourierMessage {
+  readonly id: string;
+  readonly status: 'queued' | 'sent' | 'processing' | 'abandoned';
+  readonly channel: 'email' | 'sms' | string;
+  readonly recipient: string;
+  readonly subject: string;
+  readonly templateType: string;
+  readonly createdAt: string;
+  readonly sendCount: number;
+  readonly body?: string;
+  readonly tenant: TenantName;
+}

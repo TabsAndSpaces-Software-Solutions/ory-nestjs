@@ -29,3 +29,19 @@ export type IamRegistrationFlow = IamFlowBase;
 export type IamRecoveryFlow = IamFlowBase;
 export type IamSettingsFlow = IamFlowBase;
 export type IamVerificationFlow = IamFlowBase;
+
+/**
+ * Logout token envelope returned by Kratos browser-logout initiation.
+ *
+ * Logout is not a regular "flow" in Kratos — for browser clients it returns
+ * a single `{ logout_token, logout_url }` pair you submit to complete the
+ * action; for native clients there's no envelope at all (you call
+ * `performNativeLogout` with the session token directly). We model the
+ * browser envelope here; the native path only needs the session token on
+ * input and returns `void` on success.
+ */
+export interface IamLogoutFlow {
+  readonly logoutToken: string;
+  readonly logoutUrl: string;
+  readonly tenant: TenantName;
+}

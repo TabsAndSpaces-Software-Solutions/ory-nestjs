@@ -37,6 +37,7 @@ import type { TenantClients } from '../clients';
 import type {
   TenantName,
   IamLoginFlow,
+  IamLogoutFlow,
   IamRecoveryFlow,
   IamRegistrationFlow,
   IamSettingsFlow,
@@ -428,6 +429,71 @@ export class FlowServiceFor {
     }
   }
 
+  /* ---- logout --------------------------------------------------- */
+
+  /**
+   * Browser logout: Kratos returns a `{ logout_token, logout_url }` pair.
+   * The consumer redirects the browser to `logout_url?token=<logout_token>`
+   * (or submits the token with `updateLogoutFlow` on modern Kratos). The
+   * request MUST carry the caller's session cookie — it's attached by the
+   * caller at HTTP ingress and forwarded verbatim to Kratos via the shared
+   * axios instance.
+   *
+   * `cookie` is the raw `Cookie` header to forward; typically
+   * `req.headers.cookie` in the controller.
+   */
+  public async initiateBrowserLogout(cookie: string): Promise<IamLogoutFlow> {
+    const api = this.frontendAny();
+    try {
+      const { data } = await api.createBrowserLogoutFlow({
+        cookie,
+      });
+      return flowMapper.logoutFromOry(
+        data as Parameters<typeof flowMapper.logoutFromOry>[0],
+        this.tenant,
+      );
+    } catch (err) {
+      throw ErrorMapper.toNest(err, {
+        correlationId: this.currentCorrelationId(),
+      });
+    }
+  }
+
+  /**
+   * Complete a browser logout flow by submitting the `logout_token`
+   * previously obtained from `initiateBrowserLogout`. On success, Kratos
+   * clears the session cookie; the caller should forward the `Set-Cookie`
+   * header to the browser.
+   */
+  public async submitBrowserLogout(logoutToken: string): Promise<void> {
+    const api = this.frontendAny();
+    try {
+      await api.updateLogoutFlow({ token: logoutToken });
+    } catch (err) {
+      throw ErrorMapper.toNest(err, {
+        correlationId: this.currentCorrelationId(),
+      });
+    }
+  }
+
+  /**
+   * Native logout: invalidates a session identified by its session token
+   * (the token returned by `createNativeLoginFlow` / `updateLoginFlow`
+   * success). No flow envelope; returns `void` on success.
+   */
+  public async performNativeLogout(sessionToken: string): Promise<void> {
+    const api = this.frontendAny();
+    try {
+      await api.performNativeLogout({
+        performNativeLogoutBody: { session_token: sessionToken },
+      });
+    } catch (err) {
+      throw ErrorMapper.toNest(err, {
+        correlationId: this.currentCorrelationId(),
+      });
+    }
+  }
+
   /* ---- fetch ---------------------------------------------------- */
 
   public async fetchFlow(
@@ -534,6 +600,9 @@ interface FrontendLike {
   createNativeVerificationFlow(req?: unknown): Promise<{ data: unknown }>;
   updateVerificationFlow(req: unknown): Promise<{ data: unknown }>;
   getVerificationFlow(req: unknown): Promise<{ data: unknown }>;
+  createBrowserLogoutFlow(req?: unknown): Promise<{ data: unknown }>;
+  updateLogoutFlow(req: unknown): Promise<{ data: unknown }>;
+  performNativeLogout(req: unknown): Promise<{ data: unknown }>;
 }
 
 /**
