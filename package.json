@@ -10,7 +10,7 @@
   "bugs": {
     "url": "https://github.com/TabsAndSpaces-Software-Solutions/ory-nestjs/issues"
   },
-  "homepage": "https://github.com/TabsAndSpaces-Software-Solutions/ory-nestjs#readme",
+  "homepage": "https://orynestjs.tabsandspaces.co/",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org"
