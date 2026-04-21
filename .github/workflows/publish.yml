@@ -52,3 +52,6 @@ jobs:
 
       - name: Publish
         run: npm publish
+        env:
+          # Use NODE_AUTH_TOKEN specifically for actions/setup-node compatibility
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
