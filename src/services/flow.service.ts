@@ -198,6 +198,16 @@ export class FlowServiceFor {
       );
       return { kind: 'continue', flow };
     } catch (err) {
+      const envelope = extractFlowEnvelopeFromError(err);
+      if (envelope !== null) {
+        return {
+          kind: 'continue',
+          flow: flowMapper.loginFromOry(
+            envelope as Parameters<typeof flowMapper.loginFromOry>[0],
+            this.tenant,
+          ),
+        };
+      }
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
       });
@@ -247,6 +257,16 @@ export class FlowServiceFor {
       );
       return { kind: 'continue', flow };
     } catch (err) {
+      const envelope = extractFlowEnvelopeFromError(err);
+      if (envelope !== null) {
+        return {
+          kind: 'continue',
+          flow: flowMapper.registrationFromOry(
+            envelope as Parameters<typeof flowMapper.registrationFromOry>[0],
+            this.tenant,
+          ),
+        };
+      }
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
       });
@@ -292,6 +312,16 @@ export class FlowServiceFor {
       );
       return { kind: 'continue', flow };
     } catch (err) {
+      const envelope = extractFlowEnvelopeFromError(err);
+      if (envelope !== null) {
+        return {
+          kind: 'continue',
+          flow: flowMapper.recoveryFromOry(
+            envelope as Parameters<typeof flowMapper.recoveryFromOry>[0],
+            this.tenant,
+          ),
+        };
+      }
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
       });
@@ -382,6 +412,16 @@ export class FlowServiceFor {
       );
       return { kind: 'continue', flow };
     } catch (err) {
+      const envelope = extractFlowEnvelopeFromError(err);
+      if (envelope !== null) {
+        return {
+          kind: 'continue',
+          flow: flowMapper.verificationFromOry(
+            envelope as Parameters<typeof flowMapper.verificationFromOry>[0],
+            this.tenant,
+          ),
+        };
+      }
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
       });
@@ -509,6 +549,33 @@ function splitInitiateOpts(
   }
   const { kind = 'browser', ...rest } = opts;
   return { kind, rest };
+}
+
+/**
+ * Extract a Kratos flow envelope from an Axios error thrown by
+ * `updateXFlow`. Kratos v26+ returns HTTP 400 with the flow body for the
+ * most common user-facing failure modes — wrong password, duplicate
+ * email, unknown identifier — rather than the semantically-correct 422
+ * older versions used. Consumers following the documented discriminated
+ * union (`{ kind: 'continue', flow } | { kind: 'success', sessionId }`)
+ * should see these surfaced as `continue` with `ui.messages[*].type =
+ * 'error'` attached, not as a 500.
+ *
+ * The heuristic is tight: we require the status to be exactly 400, the
+ * response body to be an object, and to carry both `id` (flow id) and
+ * `ui` (UI envelope). Anything else — network error, 401, 410
+ * flow-expired, 500 — falls through to `ErrorMapper.toNest`.
+ */
+function extractFlowEnvelopeFromError(err: unknown): unknown | null {
+  if (!err || typeof err !== 'object') return null;
+  const response = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!response || response.status !== 400) return null;
+  const data = response.data;
+  if (!data || typeof data !== 'object') return null;
+  const asObj = data as Record<string, unknown>;
+  if (typeof asObj.id !== 'string' || asObj.id.length === 0) return null;
+  if (!asObj.ui || typeof asObj.ui !== 'object') return null;
+  return data;
 }
 
 /**

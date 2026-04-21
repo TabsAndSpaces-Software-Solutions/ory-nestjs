@@ -159,6 +159,22 @@ function axiosErr(status: number): unknown {
   };
 }
 
+/**
+ * Build an Axios-shaped 400 rejection whose body is a full Kratos flow
+ * envelope — the shape Kratos v26+ returns for user-facing UI errors
+ * (wrong password, duplicate email, unknown identifier).
+ */
+function axiosFlowErr(flowId: string, csrf = 'csrf-err'): unknown {
+  return {
+    isAxiosError: true,
+    response: {
+      status: 400,
+      data: buildOryFlow({ id: flowId, csrf }),
+    },
+    message: 'Request failed with status code 400',
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Tests                                                              */
 /* ------------------------------------------------------------------ */
@@ -639,6 +655,132 @@ describe('FlowService', () => {
       await expect(
         service.forTenant('customer').fetchFlow('login', 'login-1'),
       ).rejects.toThrow(ServiceUnavailableException);
+    });
+  });
+
+  /* ---------- Kratos v26 HTTP 400 flow-envelope unwrap --------------- */
+  describe('submit* unwraps HTTP 400 flow envelopes into { kind: "continue", flow }', () => {
+    // Kratos v26+ returns the flow with HTTP 400 (instead of 422) on the
+    // most common user-facing failure modes — wrong password, duplicate
+    // email, unknown identifier. The service must surface these as
+    // `continue` so consumers following the documented discriminated
+    // union get `ui.messages[*].type === 'error'` to render, not a 500.
+
+    it('submitLogin — 400 + flow body → { kind: "continue", flow }', async () => {
+      const frontend = makeSpyFrontend();
+      frontend.updateLoginFlow.mockRejectedValue(axiosFlowErr('login-err'));
+      const registry = makeRegistry({
+        customer: makeClients({ tenant: 'customer', frontend }),
+      });
+      const service = new FlowService(registry);
+
+      const result = await service
+        .forTenant('customer')
+        .submitLogin('login-err', { method: 'password', password: 'wrong' });
+
+      expect(result.kind).toBe('continue');
+      if (result.kind === 'continue') {
+        expect(result.flow.id).toBe('login-err');
+        expect(result.flow.tenant).toBe('customer');
+      }
+    });
+
+    it('submitRegistration — 400 + flow body → { kind: "continue", flow }', async () => {
+      const frontend = makeSpyFrontend();
+      frontend.updateRegistrationFlow.mockRejectedValue(
+        axiosFlowErr('reg-err'),
+      );
+      const registry = makeRegistry({
+        customer: makeClients({ tenant: 'customer', frontend }),
+      });
+      const service = new FlowService(registry);
+
+      const result = await service
+        .forTenant('customer')
+        .submitRegistration('reg-err', { traits: { email: 'dup@x.io' } });
+
+      expect(result.kind).toBe('continue');
+      if (result.kind === 'continue') {
+        expect(result.flow.id).toBe('reg-err');
+      }
+    });
+
+    it('submitRecovery — 400 + flow body → { kind: "continue", flow }', async () => {
+      const frontend = makeSpyFrontend();
+      frontend.updateRecoveryFlow.mockRejectedValue(
+        axiosFlowErr('rec-err'),
+      );
+      const registry = makeRegistry({
+        customer: makeClients({ tenant: 'customer', frontend }),
+      });
+      const service = new FlowService(registry);
+
+      const result = await service
+        .forTenant('customer')
+        .submitRecovery('rec-err', { method: 'link', email: 'nope@x.io' });
+
+      expect(result.kind).toBe('continue');
+      if (result.kind === 'continue') {
+        expect(result.flow.id).toBe('rec-err');
+      }
+    });
+
+    it('submitVerification — 400 + flow body → { kind: "continue", flow }', async () => {
+      const frontend = makeSpyFrontend();
+      frontend.updateVerificationFlow.mockRejectedValue(
+        axiosFlowErr('ver-err'),
+      );
+      const registry = makeRegistry({
+        customer: makeClients({ tenant: 'customer', frontend }),
+      });
+      const service = new FlowService(registry);
+
+      const result = await service
+        .forTenant('customer')
+        .submitVerification('ver-err', { method: 'link' });
+
+      expect(result.kind).toBe('continue');
+      if (result.kind === 'continue') {
+        expect(result.flow.id).toBe('ver-err');
+      }
+    });
+
+    it('503 still throws (5xx is never a flow envelope) → ServiceUnavailableException', async () => {
+      const frontend = makeSpyFrontend();
+      frontend.updateLoginFlow.mockRejectedValue(axiosErr(503));
+      const registry = makeRegistry({
+        customer: makeClients({ tenant: 'customer', frontend }),
+      });
+      const service = new FlowService(registry);
+      await expect(
+        service.forTenant('customer').submitLogin('x', {}),
+      ).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('410 / non-flow-body 400 still reject — the unwrap heuristic requires both status === 400 AND id/ui shape', async () => {
+      const cases: unknown[] = [
+        axiosErr(410),
+        {
+          isAxiosError: true,
+          response: { status: 400, data: { error: { message: 'bad json' } } },
+        },
+      ];
+      for (const rejection of cases) {
+        const frontend = makeSpyFrontend();
+        frontend.updateLoginFlow.mockRejectedValue(rejection);
+        const registry = makeRegistry({
+          customer: makeClients({ tenant: 'customer', frontend }),
+        });
+        const service = new FlowService(registry);
+
+        let rejected = false;
+        try {
+          await service.forTenant('customer').submitLogin('x', {});
+        } catch {
+          rejected = true;
+        }
+        expect(rejected).toBe(true);
+      }
     });
   });
 });
