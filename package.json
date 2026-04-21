@@ -1,6 +1,6 @@
 {
   "name": "ory-nestjs",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ory-nestjs — NestJS wrapper library for the Ory Stack (self-hosted or Ory Cloud). Abstracts Ory away from consumers.",
   "license": "MIT",
   "repository": {

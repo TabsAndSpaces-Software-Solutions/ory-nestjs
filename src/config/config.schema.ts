@@ -74,7 +74,15 @@ const TenantConfigSchema = z
   .object({
     mode: z.enum(['self-hosted', 'cloud']),
     transport: z.enum(['cookie', 'bearer', 'cookie-or-bearer', 'oathkeeper']),
-    kratos: KratosConfigSchema,
+    // `kratos` is required for `mode: 'self-hosted'` and optional for
+    // `mode: 'cloud'` — Ory Cloud exposes a single project URL derived
+    // from `cloud.projectSlug`, so the library can synthesize a Kratos
+    // block for cloud tenants. Cloud consumers may still provide a
+    // partial `kratos` block to override the derived URL or to set a
+    // project-specific `sessionCookieName`. The mode/presence contract
+    // is enforced below in `superRefine`, and a normalized `kratos`
+    // block is guaranteed by `transform` on the way out.
+    kratos: KratosConfigSchema.optional(),
     keto: KetoConfigSchema.optional(),
     hydra: HydraConfigSchema.optional(),
     cloud: CloudConfigSchema.optional(),
@@ -85,6 +93,17 @@ const TenantConfigSchema = z
   })
   .strict()
   .superRefine((t, ctx) => {
+    // Self-hosted mode: a `kratos` block with `publicUrl` is required —
+    // there's no projectSlug to derive it from. (Zod already validates
+    // `publicUrl` inside `KratosConfigSchema` when the block is present.)
+    if (t.mode === 'self-hosted' && !t.kratos) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['kratos'],
+        message:
+          'self-hosted mode requires a kratos block with at least publicUrl',
+      });
+    }
     if (
       t.mode === 'cloud' &&
       (!t.cloud || !t.cloud.projectSlug || !t.cloud.apiKey)
@@ -116,6 +135,7 @@ const TenantConfigSchema = z
     // an `adminUrl` (implying admin intent) without a matching token.
     if (
       t.mode === 'self-hosted' &&
+      t.kratos !== undefined &&
       t.kratos.adminUrl !== undefined &&
       t.kratos.adminToken === undefined
     ) {
@@ -140,6 +160,41 @@ const TenantConfigSchema = z
         message: 'cookie transport in production requires trustProxy: true',
       });
     }
+  })
+  .transform((t) => {
+    // Normalize `kratos` so every downstream consumer (transports, client
+    // factory, health indicator) can read `tenant.kratos.*` uniformly
+    // regardless of `mode`.
+    //
+    //   - Cloud:       synthesize `kratos` from `cloud.projectSlug` +
+    //                  `cloud.apiKey`. Consumer-supplied overrides win.
+    //   - Self-hosted: the `kratos` block was required by `superRefine`,
+    //                  so we re-assert its presence here to give the output
+    //                  type a non-optional `kratos` field.
+    //
+    // `sessionCookieName` is NOT auto-derived: Ory Cloud's session cookie
+    // is named with a project-specific random slug (visible in the Ory
+    // Console, not the same as `cloud.projectSlug`), so any consumer using
+    // the `cookie` or `cookie-or-bearer` transport with Ory Cloud MUST
+    // supply `kratos.sessionCookieName` explicitly. The
+    // `ory_kratos_session` default stays as a last-resort fallback.
+    if (t.mode === 'cloud' && t.cloud) {
+      const slug = t.cloud.projectSlug;
+      const derivedUrl = `https://${slug}.projects.oryapis.com`;
+      return {
+        ...t,
+        kratos: {
+          publicUrl: t.kratos?.publicUrl ?? derivedUrl,
+          adminUrl: t.kratos?.adminUrl ?? derivedUrl,
+          adminToken: t.kratos?.adminToken ?? t.cloud.apiKey,
+          sessionCookieName:
+            t.kratos?.sessionCookieName ?? 'ory_kratos_session',
+        },
+      };
+    }
+    // superRefine guarantees `kratos` is present for self-hosted mode;
+    // the non-null assertion keeps the output type uniform.
+    return { ...t, kratos: t.kratos! };
   });
 
 export const IamOptionsSchema = z
