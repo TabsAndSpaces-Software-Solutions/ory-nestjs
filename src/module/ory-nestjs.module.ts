@@ -67,8 +67,11 @@ import {
   Redactor,
 } from '../audit';
 import {
+  InMemoryReplayCache,
   NoopSessionCache,
+  REPLAY_CACHE,
   SESSION_CACHE,
+  type ReplayCache,
   type SessionCache,
 } from '../cache';
 import {
@@ -187,6 +190,7 @@ export class IamModule {
       providers: [
         validatedProvider,
         cacheProvider,
+        IamModule.buildReplayCacheProvider(validated),
         ...IamModule.coreProviders(registerAppGuard, consumerSink),
       ],
       exports: IamModule.coreExports(),
@@ -256,6 +260,13 @@ export class IamModule {
       inject: [IAM_OPTIONS_VALIDATED],
     };
 
+    const replayCacheProvider: Provider = {
+      provide: REPLAY_CACHE,
+      useFactory: (validated: ValidatedIamOptions): ReplayCache | undefined =>
+        IamModule.buildReplayCacheInstance(validated),
+      inject: [IAM_OPTIONS_VALIDATED],
+    };
+
     return {
       module: IamModule,
       // Always globally visible — see class JSDoc, section 4.
@@ -265,6 +276,7 @@ export class IamModule {
         ...asyncProviders,
         validatedProvider,
         defaultCacheProvider,
+        replayCacheProvider,
         ...IamModule.coreProviders(true, undefined),
       ],
       exports: IamModule.coreExports(),
@@ -314,6 +326,41 @@ export class IamModule {
       message:
         'options.sessionCache must be a SessionCache instance, a class constructor, or a NestJS Provider.',
     });
+  }
+
+  /**
+   * Build a `REPLAY_CACHE` provider tied to the sync `forRoot` path. When
+   * at least one tenant enables `oathkeeper.replayProtection`, install an
+   * `InMemoryReplayCache` by default — consumers wanting multi-pod
+   * guarantees override the `REPLAY_CACHE` token with a Redis-backed
+   * implementation in their own module.
+   */
+  private static buildReplayCacheProvider(
+    validated: ValidatedIamOptions,
+  ): Provider {
+    return {
+      provide: REPLAY_CACHE,
+      useValue: IamModule.buildReplayCacheInstance(validated),
+    };
+  }
+
+  /**
+   * Produces the actual `ReplayCache` instance — or `undefined` when no
+   * tenant opts in. `undefined` is a legitimate value for an `@Optional()`
+   * DI dependency; the transport falls closed if a tenant has
+   * `replayProtection.enabled: true` and the binding resolves to
+   * `undefined`, which surfaces as a 401 rather than silently disabling
+   * protection.
+   */
+  private static buildReplayCacheInstance(
+    validated: ValidatedIamOptions,
+  ): ReplayCache | undefined {
+    for (const tenant of Object.values(validated.tenants)) {
+      if (tenant.oathkeeper?.replayProtection?.enabled === true) {
+        return new InMemoryReplayCache();
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -548,6 +595,7 @@ export class IamModule {
       TENANT_REGISTRY,
       TransportFactory,
       SESSION_CACHE,
+      REPLAY_CACHE,
     ];
   }
 

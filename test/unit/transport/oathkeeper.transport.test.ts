@@ -22,6 +22,11 @@ interface OathkeeperOptions {
   identityHeader?: string;
   signatureHeader?: string;
   signerKeys?: string[];
+  verifier?: 'hmac' | 'jwt';
+  jwks?: Record<string, unknown>;
+  audience?: string | readonly string[];
+  clockSkewMs?: number;
+  replayProtection?: { enabled: boolean; ttlMs?: number };
 }
 
 function makeTenantConfig(opts: OathkeeperOptions = {}): TenantConfig {
@@ -35,7 +40,15 @@ function makeTenantConfig(opts: OathkeeperOptions = {}): TenantConfig {
     oathkeeper: {
       identityHeader: opts.identityHeader ?? 'x-user',
       signatureHeader: opts.signatureHeader ?? 'x-user-signature',
+      verifier: opts.verifier ?? 'hmac',
       signerKeys: opts.signerKeys ?? ['primary-key'],
+      jwks: opts.jwks,
+      audience: opts.audience,
+      clockSkewMs: opts.clockSkewMs ?? 30_000,
+      replayProtection:
+        opts.replayProtection === undefined
+          ? undefined
+          : { enabled: opts.replayProtection.enabled, ttlMs: opts.replayProtection.ttlMs ?? 60_000 },
     },
   } as unknown as TenantConfig;
 }
@@ -138,7 +151,7 @@ describe('OathkeeperTransport', () => {
 
   it('logs a one-time WARN when rotation falls through to a non-primary key', async () => {
     const logger = { warn: jest.fn(), log: jest.fn(), error: jest.fn(), debug: jest.fn() };
-    const transport = new OathkeeperTransport(logger as unknown as import('@nestjs/common').Logger);
+    const transport = new OathkeeperTransport(undefined, logger as unknown as import('@nestjs/common').Logger);
     const tenant = makeTenant();
     const sig = signBase64(plainEnvelope, 'secondary-key');
     const req: RequestLike = {
@@ -157,7 +170,7 @@ describe('OathkeeperTransport', () => {
 
   it('does NOT warn when the primary key verifies', async () => {
     const logger = { warn: jest.fn(), log: jest.fn(), error: jest.fn(), debug: jest.fn() };
-    const transport = new OathkeeperTransport(logger as unknown as import('@nestjs/common').Logger);
+    const transport = new OathkeeperTransport(undefined, logger as unknown as import('@nestjs/common').Logger);
     const tenant = makeTenant();
     const sig = signBase64(plainEnvelope, 'primary-key');
     const req: RequestLike = {
@@ -244,5 +257,287 @@ describe('OathkeeperTransport', () => {
     await expect(
       transport.resolve(req, tenant, 'tenant-a', config),
     ).rejects.toBeInstanceOf(IamUnauthorizedError);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Zero-trust additions (0.3.0): expiry, audience, replay, JWT mode.   */
+/* ------------------------------------------------------------------ */
+import {
+  InMemoryReplayCache,
+} from '../../../src/cache/in-memory-replay-cache';
+
+describe('OathkeeperTransport — envelope expiry enforcement', () => {
+  it('rejects an envelope whose expiresAt is in the past (beyond clockSkewMs)', async () => {
+    const transport = new OathkeeperTransport();
+    const expired = JSON.stringify({
+      id: 'u_1',
+      schemaId: 'default',
+      state: 'active',
+      tenant: 'tenant-a',
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const sig = signBase64(expired, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': expired, 'x-user-signature': sig },
+    };
+    await expect(
+      transport.resolve(req, makeTenant(), 'tenant-a', makeTenantConfig({ clockSkewMs: 30_000 })),
+    ).rejects.toMatchObject({ message: expect.stringMatching(/expired/i) });
+  });
+
+  it('accepts an envelope whose expiresAt is inside the clockSkewMs leeway', async () => {
+    const transport = new OathkeeperTransport();
+    const nearExpiry = JSON.stringify({
+      id: 'u_1',
+      schemaId: 'default',
+      state: 'active',
+      tenant: 'tenant-a',
+      // Expired 5s ago, but 30s clock skew means it's still accepted.
+      expiresAt: new Date(Date.now() - 5_000).toISOString(),
+    });
+    const sig = signBase64(nearExpiry, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': nearExpiry, 'x-user-signature': sig },
+    };
+    const result = await transport.resolve(
+      req,
+      makeTenant(),
+      'tenant-a',
+      makeTenantConfig({ clockSkewMs: 30_000 }),
+    );
+    expect(result).not.toBeNull();
+  });
+});
+
+describe('OathkeeperTransport — audience scoping', () => {
+  it('rejects an envelope when configured audience does not match', async () => {
+    const transport = new OathkeeperTransport();
+    const envelope = JSON.stringify({
+      id: 'u_1',
+      state: 'active',
+      tenant: 'tenant-a',
+      audience: 'other-service',
+    });
+    const sig = signBase64(envelope, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': envelope, 'x-user-signature': sig },
+    };
+    await expect(
+      transport.resolve(
+        req,
+        makeTenant(),
+        'tenant-a',
+        makeTenantConfig({ audience: 'orders-api' }),
+      ),
+    ).rejects.toMatchObject({ message: 'audience_mismatch' });
+  });
+
+  it('accepts an envelope whose audience intersects the configured list', async () => {
+    const transport = new OathkeeperTransport();
+    const envelope = JSON.stringify({
+      id: 'u_1',
+      state: 'active',
+      tenant: 'tenant-a',
+      audience: ['orders-api', 'reporting-api'],
+    });
+    const sig = signBase64(envelope, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': envelope, 'x-user-signature': sig },
+    };
+    const result = await transport.resolve(
+      req,
+      makeTenant(),
+      'tenant-a',
+      makeTenantConfig({ audience: ['something-else', 'orders-api'] }),
+    );
+    expect(result).not.toBeNull();
+  });
+
+  it('rejects when configured audience is present but envelope omits the claim', async () => {
+    const transport = new OathkeeperTransport();
+    const envelope = JSON.stringify({ id: 'u_1', state: 'active', tenant: 'tenant-a' });
+    const sig = signBase64(envelope, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': envelope, 'x-user-signature': sig },
+    };
+    await expect(
+      transport.resolve(
+        req,
+        makeTenant(),
+        'tenant-a',
+        makeTenantConfig({ audience: 'orders-api' }),
+      ),
+    ).rejects.toMatchObject({ message: 'audience_mismatch' });
+  });
+});
+
+describe('OathkeeperTransport — anti-replay via jti', () => {
+  it('accepts a first-use jti, rejects the second use of the same jti', async () => {
+    const cache = new InMemoryReplayCache();
+    const transport = new OathkeeperTransport(cache);
+    const envelope = JSON.stringify({
+      id: 'u_1',
+      state: 'active',
+      tenant: 'tenant-a',
+      jti: 'jti-42',
+    });
+    const sig = signBase64(envelope, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': envelope, 'x-user-signature': sig },
+    };
+    const cfg = makeTenantConfig({
+      replayProtection: { enabled: true, ttlMs: 60_000 },
+    });
+    const first = await transport.resolve(req, makeTenant(), 'tenant-a', cfg);
+    expect(first).not.toBeNull();
+    await expect(
+      transport.resolve(req, makeTenant(), 'tenant-a', cfg),
+    ).rejects.toMatchObject({ message: 'replay' });
+  });
+
+  it('rejects when replay protection is enabled but the envelope lacks jti', async () => {
+    const transport = new OathkeeperTransport(new InMemoryReplayCache());
+    const envelope = JSON.stringify({ id: 'u_1', state: 'active', tenant: 'tenant-a' });
+    const sig = signBase64(envelope, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': envelope, 'x-user-signature': sig },
+    };
+    await expect(
+      transport.resolve(
+        req,
+        makeTenant(),
+        'tenant-a',
+        makeTenantConfig({ replayProtection: { enabled: true } }),
+      ),
+    ).rejects.toMatchObject({ message: 'replay_jti_missing' });
+  });
+
+  it('fails closed when replay protection is enabled but no cache is wired', async () => {
+    const transport = new OathkeeperTransport(); // no replay cache
+    const envelope = JSON.stringify({
+      id: 'u_1',
+      state: 'active',
+      tenant: 'tenant-a',
+      jti: 'jti-1',
+    });
+    const sig = signBase64(envelope, 'primary-key');
+    const req: RequestLike = {
+      headers: { 'x-user': envelope, 'x-user-signature': sig },
+    };
+    await expect(
+      transport.resolve(
+        req,
+        makeTenant(),
+        'tenant-a',
+        makeTenantConfig({ replayProtection: { enabled: true } }),
+      ),
+    ).rejects.toMatchObject({ message: 'replay_cache_unavailable' });
+  });
+});
+
+describe('OathkeeperTransport — JWT verifier with inline JWKS', () => {
+  // Generate an RSA keypair once and reuse across all JWT tests.
+  let jwk: Record<string, unknown>;
+  let signKey: unknown;
+
+  beforeAll(async () => {
+    const { generateKeyPair, exportJWK } = await import('jose');
+    const kp = await generateKeyPair('RS256', { extractable: true });
+    signKey = kp.privateKey;
+    const publicJwk = await exportJWK(kp.publicKey);
+    publicJwk.alg = 'RS256';
+    publicJwk.kid = 'test-key-1';
+    jwk = publicJwk as unknown as Record<string, unknown>;
+  });
+
+  async function signJwt(payload: Record<string, unknown>): Promise<string> {
+    const { SignJWT } = await import('jose');
+    return new SignJWT(payload)
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 300)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .sign(signKey as any);
+  }
+
+  it('accepts a JWT signed with the JWKS private key', async () => {
+    const transport = new OathkeeperTransport();
+    const jwt = await signJwt({ sub: 'u_jwt_1', tenant: 'tenant-a' });
+    const req: RequestLike = { headers: { 'x-user': jwt } };
+    const result = await transport.resolve(
+      req,
+      makeTenant(),
+      'tenant-a',
+      makeTenantConfig({
+        verifier: 'jwt',
+        jwks: { keys: [jwk], algorithms: ['RS256'], refreshIntervalMs: 600_000, cooldownMs: 30_000 },
+      }),
+    );
+    expect(result).not.toBeNull();
+    expect(result?.identity.id).toBe('u_jwt_1');
+  });
+
+  it('rejects a JWT whose signature does not verify against the JWKS', async () => {
+    const { SignJWT, generateKeyPair } = await import('jose');
+    const other = await generateKeyPair('RS256', { extractable: true });
+    const bad = await new SignJWT({ sub: 'intruder' })
+      .setProtectedHeader({ alg: 'RS256', kid: 'other' })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 300)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .sign(other.privateKey as any);
+    const transport = new OathkeeperTransport();
+    const req: RequestLike = { headers: { 'x-user': bad } };
+    await expect(
+      transport.resolve(
+        req,
+        makeTenant(),
+        'tenant-a',
+        makeTenantConfig({
+          verifier: 'jwt',
+          jwks: { keys: [jwk], algorithms: ['RS256'], refreshIntervalMs: 600_000, cooldownMs: 30_000 },
+        }),
+      ),
+    ).rejects.toMatchObject({ message: 'invalid_signature' });
+  });
+
+  it('rejects a JWT with an expired exp claim', async () => {
+    const { SignJWT } = await import('jose');
+    const expired = await new SignJWT({ sub: 'u_2', tenant: 'tenant-a' })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 3600)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .sign(signKey as any);
+    const transport = new OathkeeperTransport();
+    const req: RequestLike = { headers: { 'x-user': expired } };
+    await expect(
+      transport.resolve(
+        req,
+        makeTenant(),
+        'tenant-a',
+        makeTenantConfig({
+          verifier: 'jwt',
+          jwks: { keys: [jwk], algorithms: ['RS256'], refreshIntervalMs: 600_000, cooldownMs: 30_000 },
+        }),
+      ),
+    ).rejects.toMatchObject({ message: 'expired' });
+  });
+
+  it('enforces the audience claim against the configured allowlist', async () => {
+    const transport = new OathkeeperTransport();
+    const jwt = await signJwt({ sub: 'u_3', tenant: 'tenant-a', aud: 'other-api' });
+    const req: RequestLike = { headers: { 'x-user': jwt } };
+    await expect(
+      transport.resolve(
+        req,
+        makeTenant(),
+        'tenant-a',
+        makeTenantConfig({
+          verifier: 'jwt',
+          jwks: { keys: [jwk], algorithms: ['RS256'], refreshIntervalMs: 600_000, cooldownMs: 30_000 },
+          audience: 'orders-api',
+        }),
+      ),
+    ).rejects.toMatchObject({ message: 'audience_mismatch' });
   });
 });

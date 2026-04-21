@@ -106,9 +106,12 @@ export class SessionGuard implements CanActivate {
       correlationStorage.getStore()?.correlationId ??
       randomUUID();
 
+    // Hoisted outside the try so the catch can reference it for audit
+    // emission. Starts `undefined` until resolved below.
+    let tenantName: TenantName | undefined;
     try {
       // 2. Resolve tenant name.
-      const tenantName =
+      tenantName =
         this.reflector.getAllAndOverride<TenantName | undefined>(TENANT_KEY, [
           handler,
           controller,
@@ -128,11 +131,61 @@ export class SessionGuard implements CanActivate {
       // 4. Run the rest under a correlation context so downstream code
       //    (transports, interceptors) sees the same correlationId.
       return await correlationStorage.run({ correlationId }, () =>
-        this.resolveAndAttach(ctx, req, tenant, tenantName, correlationId),
+        this.resolveAndAttach(
+          ctx,
+          req,
+          tenant,
+          tenantName as TenantName,
+          correlationId,
+        ),
       );
     } catch (err) {
+      if (tenantName !== undefined) {
+        await this.emitFailureAuditFor(err, tenantName, ctx, correlationId);
+      }
       throw ErrorMapper.toNest(err, { correlationId });
     }
+  }
+
+  /**
+   * Map a subset of `IamUnauthorizedError.message` tokens thrown by
+   * transports (notably `OathkeeperTransport` in the zero-trust modes) to
+   * the matching `auth.failure.*` audit event. Unmapped messages are left
+   * un-emitted — downstream error-mapping still surfaces them as 401 at
+   * the HTTP boundary, but per-mode audit telemetry is opt-in to avoid
+   * double-logging (`auth.failure.missing_credential`, already emitted
+   * by `resolveAndAttach`, must NOT fire again here).
+   */
+  private async emitFailureAuditFor(
+    err: unknown,
+    tenantName: TenantName,
+    ctx: ExecutionContext,
+    correlationId: string,
+  ): Promise<void> {
+    if (!(err instanceof IamUnauthorizedError)) return;
+    const message = err.message;
+    const eventByMessage: Record<string, string> = {
+      unsigned_header: 'auth.failure.unsigned_header',
+      invalid_signature: 'auth.failure.invalid_signature',
+      audience_mismatch: 'auth.failure.audience_mismatch',
+      replay: 'auth.failure.replay',
+      replay_jti_missing: 'auth.failure.replay',
+      replay_cache_unavailable: 'auth.failure.replay',
+      replay_cache_error: 'auth.failure.replay',
+      expired: 'auth.failure.expired',
+      malformed_envelope: 'auth.failure.malformed',
+    };
+    const event = eventByMessage[message];
+    if (event === undefined) return;
+    const route = ctx.getHandler().name;
+    await this.audit.emit({
+      timestamp: new Date().toISOString(),
+      event: event as Parameters<typeof this.audit.emit>[0]['event'],
+      tenant: tenantName,
+      result: 'failure',
+      attributes: { route, reason: message },
+      correlationId,
+    });
   }
 
   private async resolveAndAttach(

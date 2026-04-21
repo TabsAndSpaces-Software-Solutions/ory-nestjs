@@ -22,7 +22,12 @@
  */
 import { Inject, Injectable, Optional } from '@nestjs/common';
 
-import { SESSION_CACHE, type SessionCache } from '../cache';
+import {
+  REPLAY_CACHE,
+  SESSION_CACHE,
+  type ReplayCache,
+  type SessionCache,
+} from '../cache';
 import type { TenantConfig } from '../config';
 import { BearerTransport } from './bearer.transport';
 import { CachingSessionTransport } from './caching-session.transport';
@@ -35,6 +40,11 @@ import type { SessionTransport } from './session-transport.interface';
 export class TransportFactory {
   constructor(
     @Optional() @Inject(SESSION_CACHE) private readonly cache?: SessionCache,
+    // Replay cache is an optional dep — only consulted when a tenant has
+    // `oathkeeper.replayProtection.enabled: true`. The module installs an
+    // `InMemoryReplayCache` by default when any tenant opts in; consumers
+    // wanting multi-pod guarantees override the `REPLAY_CACHE` token.
+    @Optional() @Inject(REPLAY_CACHE) private readonly replayCache?: ReplayCache,
   ) {}
 
   public forTenant(tenantConfig: TenantConfig): SessionTransport {
@@ -57,7 +67,7 @@ export class TransportFactory {
       case 'cookie-or-bearer':
         return new CookieOrBearerTransport();
       case 'oathkeeper':
-        return new OathkeeperTransport();
+        return new OathkeeperTransport(this.replayCache);
       default: {
         const unknownKind: string = String(
           (tenantConfig as { transport?: unknown }).transport,

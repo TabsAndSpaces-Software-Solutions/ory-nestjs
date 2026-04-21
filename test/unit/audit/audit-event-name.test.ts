@@ -13,6 +13,10 @@ const EXPECTED: AuditEventName[] = [
   'auth.failure.missing_credential',
   'auth.failure.malformed',
   'auth.failure.token_inactive',
+  // Zero-trust / Oathkeeper JWT-mode events added in 0.3.0.
+  'auth.failure.invalid_signature',
+  'auth.failure.audience_mismatch',
+  'auth.failure.replay',
   'auth.tenant_mismatch',
   'authz.role.deny',
   'authz.permission.deny',
@@ -25,8 +29,8 @@ const EXPECTED: AuditEventName[] = [
 ];
 
 describe('AuditEventName', () => {
-  it('exposes all 16 event names at runtime via AUDIT_EVENT_NAMES', () => {
-    expect(AUDIT_EVENT_NAMES).toHaveLength(16);
+  it('exposes all 19 event names at runtime via AUDIT_EVENT_NAMES', () => {
+    expect(AUDIT_EVENT_NAMES).toHaveLength(19);
     for (const name of EXPECTED) {
       expect(AUDIT_EVENT_NAMES).toContain(name);
     }

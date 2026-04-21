@@ -40,11 +40,10 @@ describe('ConfigLoader.load — oathkeeper-transport refinement', () => {
       loader.load({ tenants: { customer: base } });
     } catch (err) {
       expect((err as Error).message).toMatch(/oathkeeper transport requires/);
-      expect((err as Error).message).toMatch(/signerKeys/);
     }
   });
 
-  it('rejects oathkeeper transport with empty signerKeys', () => {
+  it('rejects oathkeeper transport with empty signerKeys (verifier defaults to hmac, requires keys)', () => {
     expect(() =>
       loader.load({
         tenants: {
@@ -62,6 +61,55 @@ describe('ConfigLoader.load — oathkeeper-transport refinement', () => {
         },
       }),
     ).toThrow(IamConfigurationError);
+  });
+
+  it('rejects verifier=jwt without jwks', () => {
+    expect(() =>
+      loader.load({
+        tenants: {
+          customer: {
+            ...base,
+            oathkeeper: { verifier: 'jwt' as const },
+          },
+        },
+      }),
+    ).toThrow(IamConfigurationError);
+  });
+
+  it('accepts verifier=jwt with inline jwks.keys', () => {
+    expect(() =>
+      loader.load({
+        tenants: {
+          customer: {
+            ...base,
+            oathkeeper: {
+              verifier: 'jwt' as const,
+              jwks: {
+                keys: [
+                  { kty: 'RSA', n: 'abc', e: 'AQAB' } as Record<string, unknown>,
+                ],
+              },
+            },
+          },
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts verifier=jwt with jwks.url', () => {
+    expect(() =>
+      loader.load({
+        tenants: {
+          customer: {
+            ...base,
+            oathkeeper: {
+              verifier: 'jwt' as const,
+              jwks: { url: 'https://oathkeeper.internal/.well-known/jwks.json' },
+            },
+          },
+        },
+      }),
+    ).not.toThrow();
   });
 
   it('accepts non-oathkeeper transports without oathkeeper config', () => {

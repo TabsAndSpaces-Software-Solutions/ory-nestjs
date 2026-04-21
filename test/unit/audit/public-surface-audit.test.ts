@@ -14,11 +14,11 @@ describe('src/index.ts — audit exports', () => {
     expect(typeof mod.AUDIT_SINK).toBe('symbol');
   });
 
-  it('exports AUDIT_EVENT_NAMES with all 16 event names', () => {
+  it('exports AUDIT_EVENT_NAMES with all 19 event names', () => {
     const mod = publicSurface as Record<string, unknown>;
     const names = mod.AUDIT_EVENT_NAMES as readonly string[];
     expect(Array.isArray(names)).toBe(true);
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(19);
   });
 
   it('exports Redactor and LoggerAuditSink as constructors', () => {

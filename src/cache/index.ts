@@ -22,3 +22,14 @@ export {
   type InMemorySessionCacheOptions,
 } from './in-memory-session-cache';
 export { SESSION_CACHE } from './tokens';
+
+// Replay cache: prevents reuse of an envelope/JWT `jti` within its TTL.
+// Consumers can wire a Redis-backed backend via the REPLAY_CACHE token; the
+// library installs an InMemoryReplayCache by default when the oathkeeper
+// transport has replayProtection.enabled: true.
+export { REPLAY_CACHE } from './replay-cache.interface';
+export type { ReplayCache } from './replay-cache.interface';
+export {
+  InMemoryReplayCache,
+  type InMemoryReplayCacheOptions,
+} from './in-memory-replay-cache';

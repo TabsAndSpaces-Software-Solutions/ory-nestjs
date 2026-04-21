@@ -48,13 +48,84 @@ const CloudConfigSchema = z
   })
   .strict();
 
+const OathkeeperJwksSchema = z
+  .object({
+    // Exactly one of `url` or `keys` must be supplied. Guard in superRefine.
+    url: z.url().optional(),
+    keys: z.array(z.record(z.string(), z.unknown())).optional(),
+    algorithms: z.array(z.string().min(1)).nonempty().default(['RS256', 'ES256']),
+    refreshIntervalMs: z.number().int().positive().default(600_000),
+    // How long to cache the fetched JWKS before forcing a refresh on verify
+    // failure. Independent of the periodic refresh above.
+    cooldownMs: z.number().int().nonnegative().default(30_000),
+  })
+  .strict()
+  .superRefine((j, ctx) => {
+    const hasUrl = typeof j.url === 'string' && j.url.length > 0;
+    const hasKeys = Array.isArray(j.keys) && j.keys.length > 0;
+    if (hasUrl === hasKeys) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [],
+        message: 'oathkeeper.jwks requires exactly one of url or keys',
+      });
+    }
+  });
+
+const OathkeeperReplayProtectionSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    // Max age of a remembered jti. Should be ≥ envelope TTL so you can't
+    // replay within the expiry window.
+    ttlMs: z.number().int().positive().default(600_000),
+  })
+  .strict();
+
 const OathkeeperConfigSchema = z
   .object({
     identityHeader: z.string().default('X-User'),
     signatureHeader: z.string().default('X-User-Signature'),
-    signerKeys: z.array(z.string().min(1)).nonempty(),
+
+    // Verifier discriminator. Default 'hmac' preserves the pre-0.3.0
+    // behaviour. Switch to 'jwt' to use asymmetric JWT verification
+    // (Oathkeeper `id_token` mutator + JWKS).
+    verifier: z.enum(['hmac', 'jwt']).default('hmac'),
+
+    // HMAC mode: symmetric keys. Required when verifier === 'hmac'.
+    signerKeys: z.array(z.string().min(1)).nonempty().optional(),
+
+    // JWT mode: JWKS config. Required when verifier === 'jwt'.
+    jwks: OathkeeperJwksSchema.optional(),
+
+    // Shared, enforced across both verifier modes.
+    //   - `audience` — if set, the envelope MUST declare a matching
+    //     `audience` / `aud` claim. String or array of strings (first match
+    //     wins). Guards against cross-service replay when multiple services
+    //     share a signer.
+    //   - `clockSkewMs` — leeway applied to expiry checks.
+    //   - `replayProtection` — enforce one-time use via the `jti` claim.
+    audience: z.union([z.string().min(1), z.array(z.string().min(1)).nonempty()]).optional(),
+    clockSkewMs: z.number().int().nonnegative().default(30_000),
+    replayProtection: OathkeeperReplayProtectionSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((o, ctx) => {
+    if (o.verifier === 'hmac' && (!o.signerKeys || o.signerKeys.length === 0)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['signerKeys'],
+        message: 'oathkeeper.verifier=hmac requires signerKeys[] (non-empty)',
+      });
+    }
+    if (o.verifier === 'jwt' && !o.jwks) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['jwks'],
+        message:
+          'oathkeeper.verifier=jwt requires oathkeeper.jwks (url or inline keys)',
+      });
+    }
+  });
 
 const LoggingConfigSchema = z
   .object({
@@ -117,8 +188,6 @@ const TenantConfigSchema = z
     if (
       t.transport === 'oathkeeper' &&
       (!t.oathkeeper ||
-        !t.oathkeeper.signerKeys ||
-        t.oathkeeper.signerKeys.length === 0 ||
         !t.oathkeeper.identityHeader ||
         !t.oathkeeper.signatureHeader)
     ) {
@@ -126,7 +195,7 @@ const TenantConfigSchema = z
         code: 'custom',
         path: ['oathkeeper'],
         message:
-          'oathkeeper transport requires oathkeeper.signerKeys[], identityHeader, signatureHeader',
+          'oathkeeper transport requires oathkeeper config (identityHeader, signatureHeader, + verifier-specific keys)',
       });
     }
     // Self-hosted mode: admin-requiring ops need `kratos.adminToken`. The
