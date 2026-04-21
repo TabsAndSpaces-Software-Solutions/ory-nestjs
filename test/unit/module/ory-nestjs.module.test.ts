@@ -39,6 +39,7 @@ import {
 } from '../../../src/audit';
 import type { IamOptions } from '../../../src/config';
 import { Public } from '../../../src/decorators/public.decorator';
+import { RequireRole } from '../../../src/decorators/require-role.decorator';
 import { IamConfigurationError } from '../../../src/errors';
 import {
   SessionGuard,
@@ -232,6 +233,67 @@ describe('IamModule', () => {
       try {
         const status = await requestStatus(app, '/ping');
         expect(status).toBe(200);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('global APP_GUARD chain enforces @RequireRole — authenticated user without the required role → 403', async () => {
+      // Regression guard for the 0.1.x issue where RoleGuard and
+      // PermissionGuard were declared as providers but never wired into
+      // APP_GUARD — so @RequireRole was silently a no-op unless the
+      // consumer also added @UseGuards(RoleGuard) to every controller.
+      const identityWithoutRoles = {
+        id: 'u_1',
+        tenant: 'customer',
+        schemaId: 'default',
+        state: 'active',
+        metadataPublic: {},
+        traits: {},
+      };
+      const session = {
+        id: 'sess_1',
+        tenant: 'customer',
+        identityId: 'u_1',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      };
+      jest.spyOn(TransportFactory.prototype, 'forTenant').mockReturnValue({
+        resolve: async () => ({
+          identity: identityWithoutRoles,
+          session,
+          latencyMs: 1,
+        }),
+      } as never);
+
+      @Controller()
+      class RoleGuardedController {
+        @Get('/admin-only')
+        @RequireRole('admin')
+        adminOnly(): string {
+          return 'secret';
+        }
+
+        @Get('/any-authenticated')
+        ping(): string {
+          return 'ok';
+        }
+      }
+
+      @Module({ controllers: [RoleGuardedController] })
+      class RoleGuardedModule {}
+
+      const moduleRef = await Test.createTestingModule({
+        imports: [IamModule.forRoot(validOptions()), RoleGuardedModule],
+      }).compile();
+      const app = moduleRef.createNestApplication();
+      await app.init();
+
+      try {
+        // Same user — no roles. The route without @RequireRole passes
+        // SessionGuard and is allowed through by RoleGuard (no metadata,
+        // no-op). The role-gated route makes RoleGuard deny.
+        expect(await requestStatus(app, '/any-authenticated')).toBe(200);
+        expect(await requestStatus(app, '/admin-only')).toBe(403);
       } finally {
         await app.close();
       }

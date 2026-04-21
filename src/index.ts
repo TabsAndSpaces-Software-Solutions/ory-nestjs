@@ -64,3 +64,15 @@ export * from './module';
 // `TESTING_STATE` handle for in-place state mutation. Side-effect-free so
 // consumer production builds tree-shake the testing tree when not imported.
 export * from './testing';
+
+// `TransportFactory` is a transitive dependency of `SessionGuard` — its
+// constructor signature appears in the emitted `.d.ts`, so consumers using
+// `@UseGuards(SessionGuard)` outside of the module-wired DI graph (e.g.
+// a custom testing module or an advanced override) must be able to
+// reference the symbol at both the type and runtime levels. Exporting it
+// from the transport barrel alone left the declaration half-exposed — the
+// type was visible via SessionGuard's signature but not reachable from the
+// public entry. We intentionally do NOT re-export concrete transports
+// (Cookie/Bearer/Oathkeeper/...), the `RequestLike` type, or any other
+// transport internals — those remain implementation detail.
+export { TransportFactory } from './transport/transport.factory';

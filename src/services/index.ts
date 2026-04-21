@@ -10,4 +10,8 @@ export type {
   IamRecoveryResult,
   IamSettingsResult,
   IamVerificationResult,
+  IamFlowInitiateKind,
+  IamFlowInitiateOptions,
+  IamFlowKind,
+  IamAnyFlow,
 } from './flow.service';

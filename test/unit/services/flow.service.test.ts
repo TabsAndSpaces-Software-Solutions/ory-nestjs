@@ -35,18 +35,23 @@ import { IamConfigurationError } from '../../../src/errors';
 
 interface SpyFrontendApi {
   createBrowserLoginFlow: jest.Mock;
+  createNativeLoginFlow: jest.Mock;
   updateLoginFlow: jest.Mock;
   getLoginFlow: jest.Mock;
   createBrowserRegistrationFlow: jest.Mock;
+  createNativeRegistrationFlow: jest.Mock;
   updateRegistrationFlow: jest.Mock;
   getRegistrationFlow: jest.Mock;
   createBrowserRecoveryFlow: jest.Mock;
+  createNativeRecoveryFlow: jest.Mock;
   updateRecoveryFlow: jest.Mock;
   getRecoveryFlow: jest.Mock;
   createBrowserSettingsFlow: jest.Mock;
+  createNativeSettingsFlow: jest.Mock;
   updateSettingsFlow: jest.Mock;
   getSettingsFlow: jest.Mock;
   createBrowserVerificationFlow: jest.Mock;
+  createNativeVerificationFlow: jest.Mock;
   updateVerificationFlow: jest.Mock;
   getVerificationFlow: jest.Mock;
 }
@@ -54,18 +59,23 @@ interface SpyFrontendApi {
 function makeSpyFrontend(): SpyFrontendApi {
   return {
     createBrowserLoginFlow: jest.fn(),
+    createNativeLoginFlow: jest.fn(),
     updateLoginFlow: jest.fn(),
     getLoginFlow: jest.fn(),
     createBrowserRegistrationFlow: jest.fn(),
+    createNativeRegistrationFlow: jest.fn(),
     updateRegistrationFlow: jest.fn(),
     getRegistrationFlow: jest.fn(),
     createBrowserRecoveryFlow: jest.fn(),
+    createNativeRecoveryFlow: jest.fn(),
     updateRecoveryFlow: jest.fn(),
     getRecoveryFlow: jest.fn(),
     createBrowserSettingsFlow: jest.fn(),
+    createNativeSettingsFlow: jest.fn(),
     updateSettingsFlow: jest.fn(),
     getSettingsFlow: jest.fn(),
     createBrowserVerificationFlow: jest.fn(),
+    createNativeVerificationFlow: jest.fn(),
     updateVerificationFlow: jest.fn(),
     getVerificationFlow: jest.fn(),
   };
@@ -220,6 +230,47 @@ describe('FlowService', () => {
       await expect(
         service.forTenant('customer').initiateLogin({}),
       ).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('initiateLogin with kind:native routes to createNativeLoginFlow and strips the kind option', async () => {
+      // Added for the 0.2.0 browser/native split — a BFF proxying mobile
+      // or curl traffic cannot round-trip the CSRF cookie that browser
+      // flows require. Passing `kind: 'native'` must call the Native API
+      // and must NOT forward `kind` as an upstream parameter.
+      const frontend = makeSpyFrontend();
+      frontend.createNativeLoginFlow.mockResolvedValue({
+        data: buildOryFlow({ id: 'login-native', csrf: 'csrf-login' }),
+      });
+      const registry = makeRegistry({
+        customer: makeClients({ tenant: 'customer', frontend }),
+      });
+      const service = new FlowService(registry);
+
+      const flow = await service
+        .forTenant('customer')
+        .initiateLogin({ kind: 'native', returnTo: '/after' });
+
+      expect(frontend.createNativeLoginFlow).toHaveBeenCalledTimes(1);
+      expect(frontend.createBrowserLoginFlow).not.toHaveBeenCalled();
+      // The Kratos call must NOT see our internal `kind` discriminator.
+      const forwarded = frontend.createNativeLoginFlow.mock.calls[0][0];
+      expect(forwarded).toEqual({ returnTo: '/after' });
+      expect(flow.id).toBe('login-native');
+    });
+
+    it('initiateLogin without opts (or without kind) defaults to the Browser API for backwards compat', async () => {
+      const frontend = makeSpyFrontend();
+      frontend.createBrowserLoginFlow.mockResolvedValue({
+        data: buildOryFlow({ id: 'login-default', csrf: 'csrf' }),
+      });
+      const registry = makeRegistry({
+        customer: makeClients({ tenant: 'customer', frontend }),
+      });
+      const service = new FlowService(registry);
+
+      await service.forTenant('customer').initiateLogin();
+      expect(frontend.createBrowserLoginFlow).toHaveBeenCalledTimes(1);
+      expect(frontend.createNativeLoginFlow).not.toHaveBeenCalled();
     });
 
     it('submitLogin that returns a session maps to { kind: "success", sessionId }', async () => {

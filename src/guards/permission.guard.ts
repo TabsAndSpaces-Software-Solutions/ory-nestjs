@@ -48,6 +48,8 @@ import { Reflector } from '@nestjs/core';
 import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
 import {
+  IS_ANONYMOUS_KEY,
+  IS_PUBLIC_KEY,
   REQUIRED_PERMISSION_KEY,
   TENANT_KEY,
 } from '../decorators/metadata-keys';
@@ -102,6 +104,28 @@ export class PermissionGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const handler = ctx.getHandler();
     const controller = ctx.getClass();
+
+    // @Public() / @Anonymous() short-circuit: these routes sit outside the
+    // auth perimeter entirely, so permission checks cannot apply. This
+    // matters when PermissionGuard is registered as an APP_GUARD — without
+    // it, a @Public route that also (incorrectly) carried @RequirePermission
+    // would bounce through the no-principal defence-in-depth path below.
+    if (
+      this.reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC_KEY, [
+        handler,
+        controller,
+      ]) === true
+    ) {
+      return true;
+    }
+    if (
+      this.reflector.getAllAndOverride<boolean | undefined>(IS_ANONYMOUS_KEY, [
+        handler,
+        controller,
+      ]) === true
+    ) {
+      return true;
+    }
 
     // 1. Read permission metadata. If none, this guard is a no-op.
     const raw = this.reflector.getAllAndOverride<

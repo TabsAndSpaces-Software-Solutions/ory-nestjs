@@ -70,7 +70,7 @@ class FlowStubServiceFor {
   }
 
   public async initiateLogin(
-    _opts: Record<string, unknown>,
+    _opts?: Record<string, unknown>,
   ): Promise<IamLoginFlow> {
     void _opts;
     return makeFlow(this.tenant, 'login');
@@ -85,7 +85,7 @@ class FlowStubServiceFor {
   }
 
   public async initiateRegistration(
-    _opts: Record<string, unknown>,
+    _opts?: Record<string, unknown>,
   ): Promise<IamRegistrationFlow> {
     void _opts;
     return makeFlow(this.tenant, 'registration');
@@ -100,7 +100,7 @@ class FlowStubServiceFor {
   }
 
   public async initiateRecovery(
-    _opts: Record<string, unknown>,
+    _opts?: Record<string, unknown>,
   ): Promise<IamRecoveryFlow> {
     void _opts;
     return makeFlow(this.tenant, 'recovery');
@@ -115,7 +115,7 @@ class FlowStubServiceFor {
   }
 
   public async initiateSettings(
-    _opts: Record<string, unknown>,
+    _opts?: Record<string, unknown>,
   ): Promise<IamSettingsFlow> {
     void _opts;
     return makeFlow(this.tenant, 'settings');
@@ -130,7 +130,7 @@ class FlowStubServiceFor {
   }
 
   public async initiateVerification(
-    _opts: Record<string, unknown>,
+    _opts?: Record<string, unknown>,
   ): Promise<IamVerificationFlow> {
     void _opts;
     return makeFlow(this.tenant, 'verification');

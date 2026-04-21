@@ -41,7 +41,11 @@ import { Reflector } from '@nestjs/core';
 
 import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
-import { REQUIRED_ROLES_KEY } from '../decorators/metadata-keys';
+import {
+  IS_ANONYMOUS_KEY,
+  IS_PUBLIC_KEY,
+  REQUIRED_ROLES_KEY,
+} from '../decorators/metadata-keys';
 import {
   ErrorMapper,
   IamForbiddenError,
@@ -97,9 +101,34 @@ export class RoleGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    const handler = ctx.getHandler();
+    const controller = ctx.getClass();
+
+    // @Public() / @Anonymous() short-circuit: these routes are outside the
+    // auth perimeter entirely, so a role check cannot apply. This matters
+    // when RoleGuard is registered as an APP_GUARD — without it, a @Public
+    // route that also (incorrectly) carried @RequireRole would end up
+    // bouncing through the no-principal defence-in-depth path below.
+    if (
+      this.reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC_KEY, [
+        handler,
+        controller,
+      ]) === true
+    ) {
+      return true;
+    }
+    if (
+      this.reflector.getAllAndOverride<boolean | undefined>(IS_ANONYMOUS_KEY, [
+        handler,
+        controller,
+      ]) === true
+    ) {
+      return true;
+    }
+
     const required = this.reflector.getAllAndOverride<string[] | undefined>(
       REQUIRED_ROLES_KEY,
-      [ctx.getHandler(), ctx.getClass()],
+      [handler, controller],
     );
     if (!required || required.length === 0) {
       return true;

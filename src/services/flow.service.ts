@@ -82,6 +82,34 @@ export type IamFlowKind =
   | 'settings'
   | 'verification';
 
+/**
+ * How the consumer wants Kratos to initiate a self-service flow.
+ *
+ * - `'browser'` (default, backwards-compatible): calls `createBrowser*Flow`.
+ *   Kratos issues a CSRF-cookied flow intended for a real browser; the
+ *   consumer must round-trip cookies between `initiate*` and `submit*`.
+ * - `'native'`: calls `createNative*Flow`. No CSRF cookie, suitable for
+ *   mobile clients, CLIs, and BFFs proxying non-browser traffic.
+ *
+ * See `docs/usage/self-service-flows.md` for guidance on picking between
+ * browser and native transports.
+ */
+export type IamFlowInitiateKind = 'browser' | 'native';
+
+/** Common options accepted by every `initiate*` method. */
+export interface IamFlowInitiateOptions {
+  /**
+   * Kratos API flavour to call. Defaults to `'browser'` to preserve
+   * pre-0.2.0 behaviour. Use `'native'` for mobile, curl, or any consumer
+   * that cannot round-trip a CSRF cookie.
+   */
+  kind?: IamFlowInitiateKind;
+  /** Forwarded to Kratos as `returnTo`. */
+  returnTo?: string;
+  /** Extra fields forwarded to the underlying Kratos call unchanged. */
+  [extra: string]: unknown;
+}
+
 /** Discriminated union returned by `fetchFlow` — keyed by `kind`. */
 export type IamAnyFlow =
   | IamLoginFlow
@@ -130,11 +158,15 @@ export class FlowServiceFor {
   /* ---- login ---------------------------------------------------- */
 
   public async initiateLogin(
-    opts: Record<string, unknown>,
+    opts?: IamFlowInitiateOptions,
   ): Promise<IamLoginFlow> {
     const api = this.frontendAny();
+    const { kind, rest } = splitInitiateOpts(opts);
     try {
-      const { data } = await api.createBrowserLoginFlow(opts ?? {});
+      const { data } =
+        kind === 'native'
+          ? await api.createNativeLoginFlow(rest)
+          : await api.createBrowserLoginFlow(rest);
       return flowMapper.loginFromOry(
         data as Parameters<typeof flowMapper.loginFromOry>[0],
         this.tenant,
@@ -175,11 +207,15 @@ export class FlowServiceFor {
   /* ---- registration --------------------------------------------- */
 
   public async initiateRegistration(
-    opts: Record<string, unknown>,
+    opts?: IamFlowInitiateOptions,
   ): Promise<IamRegistrationFlow> {
     const api = this.frontendAny();
+    const { kind, rest } = splitInitiateOpts(opts);
     try {
-      const { data } = await api.createBrowserRegistrationFlow(opts ?? {});
+      const { data } =
+        kind === 'native'
+          ? await api.createNativeRegistrationFlow(rest)
+          : await api.createBrowserRegistrationFlow(rest);
       return flowMapper.registrationFromOry(
         data as Parameters<typeof flowMapper.registrationFromOry>[0],
         this.tenant,
@@ -220,11 +256,15 @@ export class FlowServiceFor {
   /* ---- recovery ------------------------------------------------- */
 
   public async initiateRecovery(
-    opts: Record<string, unknown>,
+    opts?: IamFlowInitiateOptions,
   ): Promise<IamRecoveryFlow> {
     const api = this.frontendAny();
+    const { kind, rest } = splitInitiateOpts(opts);
     try {
-      const { data } = await api.createBrowserRecoveryFlow(opts ?? {});
+      const { data } =
+        kind === 'native'
+          ? await api.createNativeRecoveryFlow(rest)
+          : await api.createBrowserRecoveryFlow(rest);
       return flowMapper.recoveryFromOry(
         data as Parameters<typeof flowMapper.recoveryFromOry>[0],
         this.tenant,
@@ -261,11 +301,15 @@ export class FlowServiceFor {
   /* ---- settings ------------------------------------------------- */
 
   public async initiateSettings(
-    opts: Record<string, unknown>,
+    opts?: IamFlowInitiateOptions,
   ): Promise<IamSettingsFlow> {
     const api = this.frontendAny();
+    const { kind, rest } = splitInitiateOpts(opts);
     try {
-      const { data } = await api.createBrowserSettingsFlow(opts ?? {});
+      const { data } =
+        kind === 'native'
+          ? await api.createNativeSettingsFlow(rest)
+          : await api.createBrowserSettingsFlow(rest);
       return flowMapper.settingsFromOry(
         data as Parameters<typeof flowMapper.settingsFromOry>[0],
         this.tenant,
@@ -302,11 +346,15 @@ export class FlowServiceFor {
   /* ---- verification --------------------------------------------- */
 
   public async initiateVerification(
-    opts: Record<string, unknown>,
+    opts?: IamFlowInitiateOptions,
   ): Promise<IamVerificationFlow> {
     const api = this.frontendAny();
+    const { kind, rest } = splitInitiateOpts(opts);
     try {
-      const { data } = await api.createBrowserVerificationFlow(opts ?? {});
+      const { data } =
+        kind === 'native'
+          ? await api.createNativeVerificationFlow(rest)
+          : await api.createBrowserVerificationFlow(rest);
       return flowMapper.verificationFromOry(
         data as Parameters<typeof flowMapper.verificationFromOry>[0],
         this.tenant,
@@ -427,20 +475,40 @@ export class FlowServiceFor {
  */
 interface FrontendLike {
   createBrowserLoginFlow(req?: unknown): Promise<{ data: unknown }>;
+  createNativeLoginFlow(req?: unknown): Promise<{ data: unknown }>;
   updateLoginFlow(req: unknown): Promise<{ data: unknown }>;
   getLoginFlow(req: unknown): Promise<{ data: unknown }>;
   createBrowserRegistrationFlow(req?: unknown): Promise<{ data: unknown }>;
+  createNativeRegistrationFlow(req?: unknown): Promise<{ data: unknown }>;
   updateRegistrationFlow(req: unknown): Promise<{ data: unknown }>;
   getRegistrationFlow(req: unknown): Promise<{ data: unknown }>;
   createBrowserRecoveryFlow(req?: unknown): Promise<{ data: unknown }>;
+  createNativeRecoveryFlow(req?: unknown): Promise<{ data: unknown }>;
   updateRecoveryFlow(req: unknown): Promise<{ data: unknown }>;
   getRecoveryFlow(req: unknown): Promise<{ data: unknown }>;
   createBrowserSettingsFlow(req?: unknown): Promise<{ data: unknown }>;
+  createNativeSettingsFlow(req?: unknown): Promise<{ data: unknown }>;
   updateSettingsFlow(req: unknown): Promise<{ data: unknown }>;
   getSettingsFlow(req: unknown): Promise<{ data: unknown }>;
   createBrowserVerificationFlow(req?: unknown): Promise<{ data: unknown }>;
+  createNativeVerificationFlow(req?: unknown): Promise<{ data: unknown }>;
   updateVerificationFlow(req: unknown): Promise<{ data: unknown }>;
   getVerificationFlow(req: unknown): Promise<{ data: unknown }>;
+}
+
+/**
+ * Peel the transport selector off the public options object before the
+ * remainder is forwarded to Kratos verbatim. Keeps the Kratos call site a
+ * single expression and avoids leaking our `kind` token into upstream.
+ */
+function splitInitiateOpts(
+  opts: IamFlowInitiateOptions | undefined,
+): { kind: IamFlowInitiateKind; rest: Record<string, unknown> } {
+  if (opts === undefined || opts === null) {
+    return { kind: 'browser', rest: {} };
+  }
+  const { kind = 'browser', ...rest } = opts;
+  return { kind, rest };
 }
 
 /**

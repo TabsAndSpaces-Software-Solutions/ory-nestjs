@@ -488,13 +488,21 @@ export class IamModule {
       providers.push(PublicRoutesWarner);
     }
 
-    // Global guard — only when `options.global !== false`. Module-level
+    // Global guards — only when `options.global !== false`. Module-level
     // visibility is handled separately (see forRoot/forRootAsync).
+    //
+    // Order matters. NestJS runs APP_GUARDs in the order they are declared
+    // within a module, so SessionGuard runs first and populates `req.user`
+    // before RoleGuard / PermissionGuard inspect it. RoleGuard and
+    // PermissionGuard each short-circuit when the route carries no
+    // corresponding metadata, making the full chain safe to register
+    // globally even for routes that don't opt in to role/permission checks.
     if (registerAppGuard) {
-      providers.push({
-        provide: APP_GUARD,
-        useExisting: SessionGuard,
-      });
+      providers.push(
+        { provide: APP_GUARD, useExisting: SessionGuard },
+        { provide: APP_GUARD, useExisting: RoleGuard },
+        { provide: APP_GUARD, useExisting: PermissionGuard },
+      );
     }
 
     return providers;
