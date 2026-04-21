@@ -13,15 +13,15 @@ import * as path from 'path';
 const pkg = require(path.join(__dirname, '..', '..', 'package.json'));
 
 describe('package.json', () => {
-  it('is named @tabsandspaces-software-solutions/ory-nestjs', () => {
-    expect(pkg.name).toBe('@tabsandspaces-software-solutions/ory-nestjs');
+  it('is named ory-nestjs', () => {
+    expect(pkg.name).toBe('ory-nestjs');
   });
 
-  it('is publishable (not marked private) and publishes to GitHub Packages as a public scoped package', () => {
+  it('is publishable (not marked private) and publishes to the public npm registry', () => {
     expect(pkg.private).toBeFalsy();
     expect(pkg.publishConfig).toBeDefined();
     expect(pkg.publishConfig.access).toBe('public');
-    expect(pkg.publishConfig.registry).toBe('https://npm.pkg.github.com');
+    expect(pkg.publishConfig.registry).toBe('https://registry.npmjs.org');
   });
 
   it('declares legacy main/module/types entry points as dist fallbacks', () => {
