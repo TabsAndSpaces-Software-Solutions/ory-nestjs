@@ -14,19 +14,24 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
 import type { TenantClients } from '../clients';
 import type { TenantName } from '../dto';
 import { ErrorMapper, IamConfigurationError } from '../errors';
 import { TENANT_REGISTRY } from '../module/registry/tokens';
 import type { TenantRegistry } from '../module/registry/tenant-registry.service';
+import { emitAudit } from './audit-helpers';
 
 export interface IamEventStream {
   readonly id: string;
   readonly type: string;
   readonly topicArn?: string;
   readonly roleArn?: string;
-  readonly raw: Record<string, unknown>;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  /** Fields from future Ory SDKs that aren't yet typed. */
+  readonly additional: Record<string, unknown>;
   readonly tenant: TenantName;
 }
 
@@ -57,12 +62,14 @@ export class EventsService {
 
   constructor(
     @Inject(TENANT_REGISTRY) private readonly registry: TenantRegistry,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   public forTenant(name: TenantName): EventsServiceFor {
     const existing = this.byTenant.get(name);
     if (existing !== undefined) return existing;
     const reg = this.registry;
+    const audit = this.audit;
     const wrapper: EventsServiceFor = {
       create: async (projectId, input) => {
         const api = events(reg, name);
@@ -74,7 +81,12 @@ export class EventsService {
             project: projectId,
             createEventStreamBody: body,
           });
-          return toStream(data, name);
+          const stream = toStream(data, name);
+          await emitAudit(audit, 'iam.network.events.create', name, {
+            targetId: `${projectId}/${stream.id}`,
+            attributes: { streamType: input.type },
+          });
+          return stream;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -97,7 +109,11 @@ export class EventsService {
             eventStreamId: streamId,
             setEventStreamBody: patch,
           });
-          return toStream(data, name);
+          const stream = toStream(data, name);
+          await emitAudit(audit, 'iam.network.events.set', name, {
+            targetId: `${projectId}/${streamId}`,
+          });
+          return stream;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -112,6 +128,9 @@ export class EventsService {
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
+        await emitAudit(audit, 'iam.network.events.delete', name, {
+          targetId: `${projectId}/${streamId}`,
+        });
       },
     };
     this.byTenant.set(name, wrapper);
@@ -119,14 +138,29 @@ export class EventsService {
   }
 }
 
+const STREAM_KNOWN_FIELDS = new Set([
+  'id',
+  'type',
+  'topic_arn',
+  'role_arn',
+  'created_at',
+  'updated_at',
+]);
+
 function toStream(raw: unknown, tenant: TenantName): IamEventStream {
   const s = (raw ?? {}) as Record<string, unknown>;
+  const additional: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(s)) {
+    if (!STREAM_KNOWN_FIELDS.has(k)) additional[k] = v;
+  }
   return {
     id: typeof s.id === 'string' ? s.id : '',
     type: typeof s.type === 'string' ? s.type : '',
     topicArn: typeof s.topic_arn === 'string' ? s.topic_arn : undefined,
     roleArn: typeof s.role_arn === 'string' ? s.role_arn : undefined,
-    raw: s,
+    createdAt: typeof s.created_at === 'string' ? s.created_at : undefined,
+    updatedAt: typeof s.updated_at === 'string' ? s.updated_at : undefined,
+    additional,
     tenant,
   };
 }

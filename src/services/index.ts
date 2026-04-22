@@ -57,12 +57,14 @@ export type {
   ProjectAdminServiceFor,
   IamProject,
   IamProjectApiKey,
+  IamProjectMember,
 } from './project-admin.service';
 export { WorkspaceAdminService } from './workspace-admin.service';
 export type {
   WorkspaceAdminServiceFor,
   IamWorkspace,
   IamWorkspaceApiKey,
+  IamWorkspaceProject,
 } from './workspace-admin.service';
 export { EventsService } from './events.service';
 export type { EventsServiceFor, IamEventStream } from './events.service';

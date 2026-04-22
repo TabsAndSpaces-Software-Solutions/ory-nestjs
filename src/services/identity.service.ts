@@ -215,10 +215,15 @@ export class IdentityServiceFor {
         createIdentity(req: unknown): Promise<{ data: unknown }>;
       };
       const { data } = await apiAny.createIdentity({ createIdentityBody: body });
-      return identityMapper.fromOryWithTraits(
+      const identity = identityMapper.fromOryWithTraits(
         data as Parameters<typeof identityMapper.fromOryWithTraits>[0],
         this.tenant,
       );
+      await this.emitMutating('iam.identity.create', {
+        targetId: identity.id,
+        attributes: { schemaId: input.schemaId },
+      });
+      return identity;
     } catch (err) {
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
@@ -251,10 +256,12 @@ export class IdentityServiceFor {
         id,
         updateIdentityBody: body,
       });
-      return identityMapper.fromOryWithTraits(
+      const identity = identityMapper.fromOryWithTraits(
         data as Parameters<typeof identityMapper.fromOryWithTraits>[0],
         this.tenant,
       );
+      await this.emitMutating('iam.identity.updateTraits', { targetId: id });
+      return identity;
     } catch (err) {
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
@@ -272,6 +279,7 @@ export class IdentityServiceFor {
         correlationId: this.currentCorrelationId(),
       });
     }
+    await this.emitMutating('iam.identity.delete', { targetId: id });
   }
 
   /** List all sessions currently attached to an identity. */
@@ -351,10 +359,18 @@ export class IdentityServiceFor {
           return out;
         }),
       });
-      return identityMapper.fromOryWithTraits(
+      const identity = identityMapper.fromOryWithTraits(
         data as Parameters<typeof identityMapper.fromOryWithTraits>[0],
         this.tenant,
       );
+      await this.emitMutating('iam.identity.patch', {
+        targetId: id,
+        attributes: {
+          paths: ops.map((o) => o.path),
+          opCount: ops.length,
+        },
+      });
+      return identity;
     } catch (err) {
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
@@ -375,10 +391,12 @@ export class IdentityServiceFor {
         extendSession(req: unknown): Promise<{ data: unknown }>;
       };
       const { data } = await apiAny.extendSession({ id: sessionId });
-      return sessionMapper.fromOry(
+      const session = sessionMapper.fromOry(
         data as Parameters<typeof sessionMapper.fromOry>[0],
         this.tenant,
       );
+      await this.emitMutating('iam.session.extend', { targetId: sessionId });
+      return session;
     } catch (err) {
       throw ErrorMapper.toNest(err, {
         correlationId: this.currentCorrelationId(),
@@ -403,5 +421,20 @@ export class IdentityServiceFor {
 
   private currentCorrelationId(): string | undefined {
     return correlationStorage.getStore()?.correlationId;
+  }
+
+  private async emitMutating(
+    event: string,
+    opts: { targetId?: string; attributes?: Record<string, unknown> } = {},
+  ): Promise<void> {
+    await this.audit.emit({
+      timestamp: new Date().toISOString(),
+      event,
+      tenant: this.tenant,
+      result: 'success',
+      ...(opts.targetId ? { targetId: opts.targetId } : {}),
+      attributes: opts.attributes ?? {},
+      correlationId: this.currentCorrelationId(),
+    });
   }
 }

@@ -14,6 +14,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
 import type { TenantClients } from '../clients';
 import type {
@@ -25,6 +26,7 @@ import { tokenMapper } from '../dto/mappers';
 import { ErrorMapper, IamConfigurationError } from '../errors';
 import { TENANT_REGISTRY } from '../module/registry/tokens';
 import type { TenantRegistry } from '../module/registry/tenant-registry.service';
+import { emitAudit } from './audit-helpers';
 
 export interface IamJwkCreateInput {
   /** JWS algorithm, e.g. RS256, ES256, HS256. */
@@ -68,12 +70,14 @@ export class JwkService {
 
   constructor(
     @Inject(TENANT_REGISTRY) private readonly registry: TenantRegistry,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   public forTenant(name: TenantName): JwkServiceFor {
     const existing = this.byTenant.get(name);
     if (existing !== undefined) return existing;
     const reg = this.registry;
+    const audit = this.audit;
     const wrapper: JwkServiceFor = {
       createSet: async (s, i) => {
         const api = jwkApi(reg, name);
@@ -82,10 +86,15 @@ export class JwkService {
             set: s,
             createJsonWebKeySet: { alg: i.alg, use: i.use, kid: i.kid ?? '' },
           });
-          return tokenMapper.jwksFromOry(
+          const set = tokenMapper.jwksFromOry(
             data as Parameters<typeof tokenMapper.jwksFromOry>[0],
             name,
           );
+          await emitAudit(audit, 'iam.jwk.createSet', name, {
+            targetId: s,
+            attributes: { alg: i.alg, use: i.use },
+          });
+          return set;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -109,10 +118,15 @@ export class JwkService {
             set: s,
             jsonWebKeySet: { keys: [...keys] },
           });
-          return tokenMapper.jwksFromOry(
+          const set = tokenMapper.jwksFromOry(
             data as Parameters<typeof tokenMapper.jwksFromOry>[0],
             name,
           );
+          await emitAudit(audit, 'iam.jwk.updateSet', name, {
+            targetId: s,
+            attributes: { keyCount: keys.length },
+          });
+          return set;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -124,6 +138,7 @@ export class JwkService {
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
+        await emitAudit(audit, 'iam.jwk.deleteSet', name, { targetId: s });
       },
       getKey: async (s, kid) => {
         const api = jwkApi(reg, name);
@@ -146,9 +161,13 @@ export class JwkService {
             kid,
             jsonWebKey: key,
           });
-          return tokenMapper.jwkFromOry(
+          const mapped = tokenMapper.jwkFromOry(
             data as Parameters<typeof tokenMapper.jwkFromOry>[0],
           );
+          await emitAudit(audit, 'iam.jwk.updateKey', name, {
+            targetId: `${s}/${kid}`,
+          });
+          return mapped;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -160,6 +179,9 @@ export class JwkService {
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
+        await emitAudit(audit, 'iam.jwk.deleteKey', name, {
+          targetId: `${s}/${kid}`,
+        });
       },
     };
     this.byTenant.set(name, wrapper);

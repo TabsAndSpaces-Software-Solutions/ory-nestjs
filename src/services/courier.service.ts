@@ -12,6 +12,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
 import { deepFreeze } from '../dto';
 import type { TenantClients } from '../clients';
@@ -19,6 +20,7 @@ import type { TenantName, IamCourierMessage } from '../dto';
 import { ErrorMapper, IamConfigurationError } from '../errors';
 import { TENANT_REGISTRY } from '../module/registry/tokens';
 import type { TenantRegistry } from '../module/registry/tenant-registry.service';
+import { emitAudit } from './audit-helpers';
 
 export interface IamCourierMessageList {
   items: IamCourierMessage[];
@@ -53,6 +55,7 @@ export class CourierService {
 
   constructor(
     @Inject(TENANT_REGISTRY) private readonly registry: TenantRegistry,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   public forTenant(name: TenantName): CourierServiceFor {
@@ -61,7 +64,8 @@ export class CourierService {
 
     const wrapper: CourierServiceFor = {
       list: (opts) => listImpl(this.registry, name, opts ?? {}),
-      get: (id, opts) => getImpl(this.registry, name, id, opts ?? {}),
+      get: (id, opts) =>
+        getImpl(this.registry, this.audit, name, id, opts ?? {}),
     };
     this.byTenant.set(name, wrapper);
     return wrapper;
@@ -106,6 +110,7 @@ async function listImpl(
 
 async function getImpl(
   registry: TenantRegistry,
+  audit: AuditSink,
   tenant: TenantName,
   id: string,
   opts: { includeBody?: boolean },
@@ -113,7 +118,16 @@ async function getImpl(
   const api = requireCourier(registry, tenant);
   try {
     const { data } = await api.getCourierMessage({ id });
-    return mapMessage(data, tenant, opts.includeBody === true);
+    const msg = mapMessage(data, tenant, opts.includeBody === true);
+    if (opts.includeBody === true) {
+      // Body access is compliance-sensitive — emit a dedicated event so SIEM
+      // can flag administrators reading recovery tokens / magic links.
+      await emitAudit(audit, 'iam.courier.message.access', tenant, {
+        targetId: id,
+        attributes: { includedBody: true },
+      });
+    }
+    return msg;
   } catch (err) {
     throw ErrorMapper.toNest(err, {
       correlationId: currentCorrelationId(),

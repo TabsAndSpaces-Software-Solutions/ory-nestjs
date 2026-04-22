@@ -1,0 +1,41 @@
+serve:
+  public:
+    port: 4444
+    host: 0.0.0.0
+    cors:
+      enabled: false
+  admin:
+    port: 4445
+    host: 0.0.0.0
+    cors:
+      enabled: false
+
+urls:
+  self:
+    issuer: http://127.0.0.1:4444/
+    public: http://127.0.0.1:4444/
+  # Minimal login/consent URLs — not exercised by integration tests because
+  # tests only use the client-credentials grant and introspection. Hydra
+  # refuses to start without these fields.
+  login: http://127.0.0.1:9999/login
+  consent: http://127.0.0.1:9999/consent
+
+secrets:
+  system:
+    - integration-test-secret-do-not-use-in-prod-0000000
+
+oidc:
+  subject_identifiers:
+    supported_types:
+      - pairwise
+      - public
+    pairwise:
+      salt: integration-salt
+
+log:
+  level: warning
+  leak_sensitive_values: false
+  format: json
+
+oauth2:
+  expose_internal_errors: true

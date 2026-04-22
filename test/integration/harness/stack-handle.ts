@@ -15,6 +15,10 @@ import * as path from 'node:path';
 export interface StackHandle {
   readonly kratosPublicUrl: string;
   readonly kratosAdminUrl: string;
+  readonly ketoReadUrl?: string;
+  readonly ketoWriteUrl?: string;
+  readonly hydraPublicUrl?: string;
+  readonly hydraAdminUrl?: string;
   readonly composeProjectName: string;
 }
 

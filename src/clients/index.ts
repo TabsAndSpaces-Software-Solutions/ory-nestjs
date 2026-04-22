@@ -25,3 +25,7 @@ export {
   isRetryable,
 } from './interceptors/retry.interceptor';
 export type { RetryOptions } from './interceptors/retry.interceptor';
+export { installRateLimitInterceptor } from './interceptors/rate-limit.interceptor';
+export type { RateLimitOptions } from './interceptors/rate-limit.interceptor';
+export { installCircuitBreakerInterceptor } from './interceptors/circuit-breaker.interceptor';
+export type { CircuitBreakerOptions } from './interceptors/circuit-breaker.interceptor';

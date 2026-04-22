@@ -149,6 +149,23 @@ const CacheConfigSchema = z
   })
   .strict();
 
+const RateLimitConfigSchema = z
+  .object({
+    rps: z.number().positive().default(100),
+    burst: z.number().int().positive().default(150),
+    queueTimeoutMs: z.number().int().positive().default(5_000),
+    maxQueueSize: z.number().int().positive().default(100),
+  })
+  .strict();
+
+const CircuitBreakerConfigSchema = z
+  .object({
+    failureThreshold: z.number().int().positive().default(5),
+    windowMs: z.number().int().positive().default(30_000),
+    openMs: z.number().int().positive().default(10_000),
+  })
+  .strict();
+
 const TenantConfigSchema = z
   .object({
     mode: z.enum(['self-hosted', 'cloud']),
@@ -169,6 +186,8 @@ const TenantConfigSchema = z
     logging: LoggingConfigSchema.optional(),
     cache: CacheConfigSchema.optional(),
     trustProxy: z.boolean().optional(),
+    rateLimit: RateLimitConfigSchema.optional(),
+    circuitBreaker: CircuitBreakerConfigSchema.optional(),
   })
   .strict()
   .superRefine((t, ctx) => {

@@ -14,6 +14,7 @@
 # `DockerComposeEnvironment`. Not intended for manual `docker compose up`.
 
 services:
+  # ───────────── Kratos ─────────────
   postgres:
     image: postgres:16-alpine
     environment:
@@ -46,7 +47,7 @@ services:
       kratos-migrate:
         condition: service_completed_successfully
     ports:
-      - "4433" # public (host port assigned by testcontainers)
+      - "4433" # public
       - "4434" # admin
     environment:
       DSN: postgres://ory:ory@postgres:5432/kratos?sslmode=disable
@@ -56,6 +57,101 @@ services:
       - ./kratos:/etc/config/kratos:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:4434/admin/health/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # ───────────── Keto ─────────────
+  keto-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: keto
+      POSTGRES_PASSWORD: keto
+      POSTGRES_DB: keto
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "keto", "-d", "keto"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  keto-migrate:
+    image: oryd/keto:v0.12.0
+    depends_on:
+      keto-postgres:
+        condition: service_healthy
+    environment:
+      DSN: postgres://keto:keto@keto-postgres:5432/keto?sslmode=disable
+    command: migrate up -y -c /etc/config/keto/keto.yml
+    restart: on-failure
+    volumes:
+      - ./keto:/etc/config/keto:ro
+
+  keto:
+    image: oryd/keto:v0.12.0
+    depends_on:
+      keto-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4466" # read
+      - "4467" # write
+    environment:
+      DSN: postgres://keto:keto@keto-postgres:5432/keto?sslmode=disable
+      LOG_LEVEL: warning
+    command: serve -c /etc/config/keto/keto.yml
+    volumes:
+      - ./keto:/etc/config/keto:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:4466/health/ready || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # ───────────── Hydra ─────────────
+  hydra-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hydra
+      POSTGRES_PASSWORD: hydra
+      POSTGRES_DB: hydra
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "hydra", "-d", "hydra"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  hydra-migrate:
+    image: oryd/hydra:v2.2.0
+    depends_on:
+      hydra-postgres:
+        condition: service_healthy
+    environment:
+      DSN: postgres://hydra:hydra@hydra-postgres:5432/hydra?sslmode=disable
+    command: migrate sql -e --yes -c /etc/config/hydra/hydra.yml
+    restart: on-failure
+    volumes:
+      - ./hydra:/etc/config/hydra:ro
+
+  hydra:
+    image: oryd/hydra:v2.2.0
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4444" # public
+      - "4445" # admin
+    environment:
+      DSN: postgres://hydra:hydra@hydra-postgres:5432/hydra?sslmode=disable
+      SECRETS_SYSTEM: integration-test-secret-do-not-use-in-prod-0000000
+      LOG_LEVEL: warning
+    command: serve all --dev -c /etc/config/hydra/hydra.yml
+    volumes:
+      - ./hydra:/etc/config/hydra:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:4445/health/ready || exit 1"]
       interval: 2s
       timeout: 3s
       retries: 30

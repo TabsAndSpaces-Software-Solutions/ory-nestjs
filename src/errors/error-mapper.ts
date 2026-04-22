@@ -137,7 +137,7 @@ export class ErrorMapper {
           {
             statusCode: 503,
             message: 'Service Unavailable',
-            retryAfter: 5,
+            retryAfter: err.retryAfter ?? 5,
           },
           correlationId,
         ),

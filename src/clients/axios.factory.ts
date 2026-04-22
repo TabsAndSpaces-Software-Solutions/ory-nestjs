@@ -30,6 +30,8 @@ import type { ValidatedTenantConfig } from '../config';
 import { applyRequestId } from './interceptors/request-id.interceptor';
 import { redactErrorHandler } from './interceptors/redact-error.interceptor';
 import { installRetryInterceptor } from './interceptors/retry.interceptor';
+import { installRateLimitInterceptor } from './interceptors/rate-limit.interceptor';
+import { installCircuitBreakerInterceptor } from './interceptors/circuit-breaker.interceptor';
 
 export interface AxiosFactoryDeps {
   redactor: Redactor;
@@ -67,8 +69,19 @@ export class AxiosFactory {
       httpsAgent: new https.Agent({ keepAlive: true }),
     });
 
-    // Request pipeline: stamp an x-request-id onto every outbound request.
+    // Request pipeline (axios runs request interceptors in REVERSE registration
+    // order — last registered runs first). We want:
+    //   1. rate-limit bucket (may block/queue)
+    //   2. circuit-breaker precheck (may throw synchronously when OPEN)
+    //   3. x-request-id stamp
+    // Register them in reverse order so they execute as above.
     instance.interceptors.request.use(applyRequestId);
+    if (tenant.circuitBreaker) {
+      installCircuitBreakerInterceptor(instance, tenant.circuitBreaker);
+    }
+    if (tenant.rateLimit) {
+      installRateLimitInterceptor(instance, tenant.rateLimit);
+    }
 
     // Response pipeline.
     //   First: install retry (runs AFTER redact on errors, since axios

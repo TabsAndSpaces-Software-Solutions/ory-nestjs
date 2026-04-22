@@ -11,6 +11,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
 import type { TenantClients } from '../clients';
 import type {
@@ -22,6 +23,7 @@ import { tokenMapper } from '../dto/mappers';
 import { ErrorMapper, IamConfigurationError } from '../errors';
 import { TENANT_REGISTRY } from '../module/registry/tokens';
 import type { TenantRegistry } from '../module/registry/tenant-registry.service';
+import { emitAudit } from './audit-helpers';
 
 export interface IamTrustIssuerInput {
   readonly issuer: string;
@@ -58,12 +60,14 @@ export class TrustedIssuerService {
 
   constructor(
     @Inject(TENANT_REGISTRY) private readonly registry: TenantRegistry,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   public forTenant(name: TenantName): TrustedIssuerServiceFor {
     const existing = this.byTenant.get(name);
     if (existing !== undefined) return existing;
     const reg = this.registry;
+    const audit = this.audit;
     const wrapper: TrustedIssuerServiceFor = {
       trust: async (input) => {
         const api = admin(reg, name);
@@ -79,10 +83,15 @@ export class TrustedIssuerService {
           const { data } = await api.trustOAuth2JwtGrantIssuer({
             trustOAuth2JwtGrantIssuer: body,
           });
-          return tokenMapper.trustedIssuerFromOry(
+          const issuer = tokenMapper.trustedIssuerFromOry(
             data as Parameters<typeof tokenMapper.trustedIssuerFromOry>[0],
             name,
           );
+          await emitAudit(audit, 'iam.oauth2.trustedIssuer.trust', name, {
+            targetId: issuer.id,
+            attributes: { issuer: issuer.issuer },
+          });
+          return issuer;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -126,6 +135,9 @@ export class TrustedIssuerService {
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
+        await emitAudit(audit, 'iam.oauth2.trustedIssuer.delete', name, {
+          targetId: id,
+        });
       },
     };
     this.byTenant.set(name, wrapper);

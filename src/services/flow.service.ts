@@ -32,6 +32,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
 import type { TenantClients } from '../clients';
 import type {
@@ -47,6 +48,7 @@ import { flowMapper } from '../dto/mappers';
 import { ErrorMapper } from '../errors';
 import { TENANT_REGISTRY } from '../module/registry/tokens';
 import type { TenantRegistry } from '../module/registry/tenant-registry.service';
+import { emitAudit } from './audit-helpers';
 
 /* ------------------------------------------------------------------ */
 /* Result types                                                        */
@@ -129,6 +131,7 @@ export class FlowService {
 
   constructor(
     @Inject(TENANT_REGISTRY) private readonly registry: TenantRegistry,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   /**
@@ -138,7 +141,7 @@ export class FlowService {
   public forTenant(name: TenantName): FlowServiceFor {
     let existing = this.byTenant.get(name);
     if (existing === undefined) {
-      existing = new FlowServiceFor(name, this.registry);
+      existing = new FlowServiceFor(name, this.registry, this.audit);
       this.byTenant.set(name, existing);
     }
     return existing;
@@ -154,6 +157,7 @@ export class FlowServiceFor {
   constructor(
     private readonly tenant: TenantName,
     private readonly registry: TenantRegistry,
+    private readonly audit: AuditSink,
   ) {}
 
   /* ---- login ---------------------------------------------------- */
@@ -474,6 +478,7 @@ export class FlowServiceFor {
         correlationId: this.currentCorrelationId(),
       });
     }
+    await emitAudit(this.audit, 'iam.flow.logout.browser', this.tenant);
   }
 
   /**
@@ -492,6 +497,7 @@ export class FlowServiceFor {
         correlationId: this.currentCorrelationId(),
       });
     }
+    await emitAudit(this.audit, 'iam.flow.logout.native', this.tenant);
   }
 
   /* ---- fetch ---------------------------------------------------- */

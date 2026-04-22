@@ -187,7 +187,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const a = service.forTenant('customer');
       const b = service.forTenant('customer');
       expect(a).toBe(b);
@@ -204,7 +204,7 @@ describe('FlowService', () => {
           frontend: makeSpyFrontend(),
         }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       expect(service.forTenant('customer')).not.toBe(
         service.forTenant('admin'),
       );
@@ -221,7 +221,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const flow = await service
         .forTenant('customer')
@@ -242,7 +242,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').initiateLogin({}),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -260,7 +260,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const flow = await service
         .forTenant('customer')
@@ -282,7 +282,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       await service.forTenant('customer').initiateLogin();
       expect(frontend.createBrowserLoginFlow).toHaveBeenCalledTimes(1);
@@ -297,7 +297,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -317,7 +317,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -337,7 +337,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').submitLogin('login-1', {}),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -354,7 +354,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const flow = await service.forTenant('customer').initiateRegistration({});
 
@@ -369,7 +369,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').initiateRegistration({}),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -383,7 +383,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -404,7 +404,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -427,7 +427,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service.forTenant('customer').initiateRecovery({});
       expect(flow.id).toBe('rec-1');
       expect(flow.csrfToken).toBe('csrf-rec');
@@ -439,7 +439,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').initiateRecovery({}),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -453,7 +453,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const result = await service
         .forTenant('customer')
         .submitRecovery('rec-1', { email: 'a@b.test', method: 'link' });
@@ -474,7 +474,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service.forTenant('customer').initiateSettings({});
       expect(flow.id).toBe('set-1');
       expect(flow.csrfToken).toBe('csrf-set');
@@ -486,7 +486,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').initiateSettings({}),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -500,7 +500,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const result = await service
         .forTenant('customer')
         .submitSettings('set-1', { method: 'profile' });
@@ -521,7 +521,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service.forTenant('customer').initiateVerification({});
       expect(flow.id).toBe('ver-1');
       expect(flow.csrfToken).toBe('csrf-ver');
@@ -533,7 +533,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').initiateVerification({}),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -547,7 +547,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const result = await service
         .forTenant('customer')
         .submitVerification('ver-1', { method: 'link' });
@@ -568,7 +568,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service
         .forTenant('customer')
         .fetchFlow('login', 'login-1');
@@ -585,7 +585,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service
         .forTenant('customer')
         .fetchFlow('registration', 'reg-1');
@@ -603,7 +603,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service
         .forTenant('customer')
         .fetchFlow('recovery', 'rec-1');
@@ -619,7 +619,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service
         .forTenant('customer')
         .fetchFlow('settings', 'set-1');
@@ -635,7 +635,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       const flow = await service
         .forTenant('customer')
         .fetchFlow('verification', 'ver-1');
@@ -651,7 +651,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').fetchFlow('login', 'login-1'),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -672,7 +672,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -693,7 +693,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -713,7 +713,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -733,7 +733,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
       const result = await service
         .forTenant('customer')
@@ -751,7 +751,7 @@ describe('FlowService', () => {
       const registry = makeRegistry({
         customer: makeClients({ tenant: 'customer', frontend }),
       });
-      const service = new FlowService(registry);
+      const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
       await expect(
         service.forTenant('customer').submitLogin('x', {}),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -771,7 +771,7 @@ describe('FlowService', () => {
         const registry = makeRegistry({
           customer: makeClients({ tenant: 'customer', frontend }),
         });
-        const service = new FlowService(registry);
+        const service = new FlowService(registry, { emit: jest.fn() } as unknown as never);
 
         let rejected = false;
         try {

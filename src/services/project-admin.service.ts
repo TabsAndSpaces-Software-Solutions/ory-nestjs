@@ -17,19 +17,37 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AUDIT_SINK, type AuditSink } from '../audit';
 import { correlationStorage } from '../clients/correlation-storage';
 import type { TenantClients } from '../clients';
 import type { TenantName } from '../dto';
 import { ErrorMapper, IamConfigurationError } from '../errors';
 import { TENANT_REGISTRY } from '../module/registry/tokens';
 import type { TenantRegistry } from '../module/registry/tenant-registry.service';
+import { emitAudit } from './audit-helpers';
 
 export interface IamProject {
   readonly id: string;
   readonly name: string;
   readonly slug?: string;
   readonly workspaceId?: string;
-  readonly raw: Record<string, unknown>;
+  readonly environment?: 'prod' | 'stage' | 'dev' | string;
+  readonly hosts?: readonly string[];
+  readonly state?: 'running' | 'halted' | 'destroyed' | string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  /**
+   * Forward-compatibility slot: fields introduced by future Ory SDKs that
+   * aren't yet typed. Prefer named fields above when possible.
+   */
+  readonly additional: Record<string, unknown>;
+  readonly tenant: TenantName;
+}
+
+export interface IamProjectMember {
+  readonly id: string;
+  readonly email: string;
+  readonly role?: string;
   readonly tenant: TenantName;
 }
 
@@ -38,6 +56,7 @@ export interface IamProjectApiKey {
   readonly name: string;
   readonly value?: string;
   readonly createdAt?: string;
+  readonly updatedAt?: string;
   readonly tenant: TenantName;
 }
 
@@ -47,7 +66,7 @@ export interface ProjectAdminServiceFor {
   get(id: string): Promise<IamProject>;
   set(id: string, patch: Record<string, unknown>): Promise<IamProject>;
   purge(id: string): Promise<void>;
-  listMembers(id: string): Promise<Array<Record<string, unknown>>>;
+  listMembers(id: string): Promise<IamProjectMember[]>;
   createApiKey(
     projectId: string,
     input: { name: string },
@@ -74,12 +93,14 @@ export class ProjectAdminService {
 
   constructor(
     @Inject(TENANT_REGISTRY) private readonly registry: TenantRegistry,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   public forTenant(name: TenantName): ProjectAdminServiceFor {
     const existing = this.byTenant.get(name);
     if (existing !== undefined) return existing;
     const reg = this.registry;
+    const audit = this.audit;
     const wrapper: ProjectAdminServiceFor = {
       create: async (input) => {
         const api = projects(reg, name);
@@ -90,7 +111,15 @@ export class ProjectAdminService {
               ...(input.workspaceId ? { workspace_id: input.workspaceId } : {}),
             },
           });
-          return toProject(data, name);
+          const project = toProject(data, name);
+          await emitAudit(audit, 'iam.network.project.create', name, {
+            targetId: project.id,
+            attributes: {
+              name: input.name,
+              workspaceId: input.workspaceId,
+            },
+          });
+          return project;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -121,7 +150,11 @@ export class ProjectAdminService {
             projectId: id,
             setProject: patch,
           });
-          return toProject(data, name);
+          const project = toProject(data, name);
+          await emitAudit(audit, 'iam.network.project.set', name, {
+            targetId: id,
+          });
+          return project;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -133,12 +166,19 @@ export class ProjectAdminService {
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
+        // Purge is irreversible — emit with an explicit attribute so downstream
+        // alerting can key off it.
+        await emitAudit(audit, 'iam.network.project.purge', name, {
+          targetId: id,
+          attributes: { irreversible: true },
+        });
       },
       listMembers: async (id) => {
         const api = projects(reg, name);
         try {
           const { data } = await api.getProjectMembers({ projectId: id });
-          return Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
+          const list = Array.isArray(data) ? data : [];
+          return list.map((m) => toMember(m, name));
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -150,7 +190,12 @@ export class ProjectAdminService {
             project: projectId,
             createProjectApiKeyRequest: { name: input.name },
           });
-          return toApiKey(data, name);
+          const key = toApiKey(data, name);
+          await emitAudit(audit, 'iam.network.project.apiKey.create', name, {
+            targetId: `${projectId}/${key.id}`,
+            attributes: { keyName: input.name },
+          });
+          return key;
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
@@ -172,6 +217,9 @@ export class ProjectAdminService {
         } catch (err) {
           throw ErrorMapper.toNest(err, { correlationId: corrId() });
         }
+        await emitAudit(audit, 'iam.network.project.apiKey.delete', name, {
+          targetId: `${projectId}/${tokenId}`,
+        });
       },
     };
     this.byTenant.set(name, wrapper);
@@ -179,15 +227,50 @@ export class ProjectAdminService {
   }
 }
 
+const PROJECT_KNOWN_FIELDS = new Set([
+  'id',
+  'name',
+  'slug',
+  'workspace_id',
+  'environment',
+  'hosts',
+  'state',
+  'created_at',
+  'updated_at',
+]);
+
 function toProject(raw: unknown, tenant: TenantName): IamProject {
   const p = (raw ?? {}) as Record<string, unknown>;
+  const additional: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (!PROJECT_KNOWN_FIELDS.has(k)) additional[k] = v;
+  }
   return {
     id: typeof p.id === 'string' ? p.id : '',
     name: typeof p.name === 'string' ? p.name : '',
     slug: typeof p.slug === 'string' ? p.slug : undefined,
     workspaceId:
       typeof p.workspace_id === 'string' ? p.workspace_id : undefined,
-    raw: p,
+    environment:
+      typeof p.environment === 'string'
+        ? (p.environment as IamProject['environment'])
+        : undefined,
+    hosts: Array.isArray(p.hosts) ? (p.hosts as string[]) : undefined,
+    state:
+      typeof p.state === 'string' ? (p.state as IamProject['state']) : undefined,
+    createdAt: typeof p.created_at === 'string' ? p.created_at : undefined,
+    updatedAt: typeof p.updated_at === 'string' ? p.updated_at : undefined,
+    additional,
+    tenant,
+  };
+}
+
+function toMember(raw: unknown, tenant: TenantName): IamProjectMember {
+  const m = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: typeof m.id === 'string' ? m.id : '',
+    email: typeof m.email === 'string' ? m.email : '',
+    role: typeof m.role === 'string' ? m.role : undefined,
     tenant,
   };
 }
@@ -199,6 +282,7 @@ function toApiKey(raw: unknown, tenant: TenantName): IamProjectApiKey {
     name: typeof k.name === 'string' ? k.name : '',
     value: typeof k.value === 'string' ? k.value : undefined,
     createdAt: typeof k.created_at === 'string' ? k.created_at : undefined,
+    updatedAt: typeof k.updated_at === 'string' ? k.updated_at : undefined,
     tenant,
   };
 }
