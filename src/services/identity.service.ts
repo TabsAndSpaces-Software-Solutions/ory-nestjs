@@ -66,6 +66,19 @@ export interface IamCreateIdentityInput {
   }>;
 }
 
+/**
+ * JSON-Patch (RFC 6902) operation accepted by `IdentityService.patch`.
+ * Kratos permits patching `traits`, `metadata_public`, `metadata_admin`,
+ * and `state` — other paths are rejected by Kratos. The library passes
+ * operations through verbatim.
+ */
+export interface IamJsonPatchOp {
+  readonly op: 'add' | 'remove' | 'replace' | 'move' | 'copy' | 'test';
+  readonly path: string;
+  readonly value?: unknown;
+  readonly from?: string;
+}
+
 @Injectable()
 export class IdentityService {
   private readonly byTenant = new Map<TenantName, IdentityServiceFor>();
@@ -305,6 +318,72 @@ export class IdentityServiceFor {
       attributes: {},
       correlationId: this.currentCorrelationId(),
     });
+  }
+
+  /**
+   * Patch an identity using JSON-Patch operations (RFC 6902). Unlike
+   * `updateTraits` — which replaces the entire traits object — patching
+   * lets you target individual fields, `metadata_public.*`,
+   * `metadata_admin.*`, or the identity `state`.
+   *
+   * Example:
+   * ```ts
+   * await identities.forTenant('default').patch(userId, [
+   *   { op: 'replace', path: '/metadata_public/roles', value: ['admin'] },
+   * ]);
+   * ```
+   */
+  public async patch(
+    id: string,
+    ops: ReadonlyArray<IamJsonPatchOp>,
+  ): Promise<IamIdentityWithTraits> {
+    const api = this.requireAdmin();
+    try {
+      const apiAny = api as unknown as {
+        patchIdentity(req: unknown): Promise<{ data: unknown }>;
+      };
+      const { data } = await apiAny.patchIdentity({
+        id,
+        jsonPatch: ops.map((o) => {
+          const out: Record<string, unknown> = { op: o.op, path: o.path };
+          if (o.value !== undefined) out.value = o.value;
+          if (o.from !== undefined) out.from = o.from;
+          return out;
+        }),
+      });
+      return identityMapper.fromOryWithTraits(
+        data as Parameters<typeof identityMapper.fromOryWithTraits>[0],
+        this.tenant,
+      );
+    } catch (err) {
+      throw ErrorMapper.toNest(err, {
+        correlationId: this.currentCorrelationId(),
+      });
+    }
+  }
+
+  /**
+   * Extend a session's lifetime server-side. The new expiry is computed by
+   * Kratos from the session's lifespan config; we don't accept an explicit
+   * `expiresAt` because Kratos doesn't expose that knob. Returns the updated
+   * session projection.
+   */
+  public async extendSession(sessionId: string): Promise<IamSession> {
+    const api = this.requireAdmin();
+    try {
+      const apiAny = api as unknown as {
+        extendSession(req: unknown): Promise<{ data: unknown }>;
+      };
+      const { data } = await apiAny.extendSession({ id: sessionId });
+      return sessionMapper.fromOry(
+        data as Parameters<typeof sessionMapper.fromOry>[0],
+        this.tenant,
+      );
+    } catch (err) {
+      throw ErrorMapper.toNest(err, {
+        correlationId: this.currentCorrelationId(),
+      });
+    }
   }
 
   /**

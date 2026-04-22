@@ -45,6 +45,14 @@ const CloudConfigSchema = z
   .object({
     projectSlug: z.string().min(1),
     apiKey: z.string().min(1),
+    /**
+     * Workspace-scoped API key for Ory Network control-plane operations
+     * (Project/Workspace/Events APIs at api.console.ory.sh). Distinct from
+     * `apiKey` (which is scoped to a single project's data plane). Optional:
+     * when absent, network-admin services fall back to `apiKey` or throw
+     * `IamConfigurationError` if the operation requires workspace scope.
+     */
+    workspaceApiKey: z.string().min(1).optional(),
   })
   .strict();
 

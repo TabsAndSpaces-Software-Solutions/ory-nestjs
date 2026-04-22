@@ -96,11 +96,21 @@ import {
 } from '../guards';
 import { IamHealthIndicator } from '../health';
 import {
+  ConsentService,
+  CourierService,
+  EventsService,
   FlowService,
   IdentityService,
+  JwkService,
+  MetadataService,
+  OAuth2ClientService,
   PermissionService,
+  ProjectAdminService,
+  SchemaService,
   SessionService,
   TokenService,
+  TrustedIssuerService,
+  WorkspaceAdminService,
 } from '../services';
 import { TransportFactory } from '../transport/transport.factory';
 
@@ -525,6 +535,16 @@ export class IamModule {
       PermissionService,
       TokenService,
       FlowService,
+      SchemaService,
+      CourierService,
+      OAuth2ClientService,
+      ConsentService,
+      JwkService,
+      TrustedIssuerService,
+      ProjectAdminService,
+      WorkspaceAdminService,
+      EventsService,
+      MetadataService,
 
       // Health indicator.
       IamHealthIndicator,
@@ -590,6 +610,16 @@ export class IamModule {
       PermissionService,
       TokenService,
       FlowService,
+      SchemaService,
+      CourierService,
+      OAuth2ClientService,
+      ConsentService,
+      JwkService,
+      TrustedIssuerService,
+      ProjectAdminService,
+      WorkspaceAdminService,
+      EventsService,
+      MetadataService,
       IamHealthIndicator,
       AUDIT_SINK,
       TENANT_REGISTRY,
